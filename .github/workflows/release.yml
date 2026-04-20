@@ -17,6 +17,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+            echo "Error: tag ${{ github.ref_name }} is not on the main branch"
+            exit 1
+          fi
+          echo "Tag is on main — proceeding with release"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
