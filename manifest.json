@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.1.0.0",
+        "changelog": "Merge branch 'develop'",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Hightmar/jellyfin-langage-failover/releases/download/v1.1.0.0/language-failover_1.1.0.0.zip",
+        "checksum": "a799d96263c8a9a9f1752b623806e89b",
+        "timestamp": "2026-04-20T17:45:24Z"
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "ignore",
         "targetAbi": "10.11.0.0",
