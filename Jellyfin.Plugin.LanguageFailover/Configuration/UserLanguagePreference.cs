@@ -34,6 +34,20 @@ public class UserLanguagePreference
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether to prefer the original-version audio track
+    /// (detected via stream title keywords like "original", "VO", "version originale")
+    /// over the priority list.
+    /// </summary>
+    public bool PreferOriginalAudio { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to show forced subtitles when the audio is
+    /// already in one of the user's subtitle languages. Useful for translating foreign
+    /// dialog in an otherwise native-language film.
+    /// </summary>
+    public bool PreferForcedWhenAudioMatches { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets per-series language overrides.
     /// When a series has an override, its languages take priority over the global user preferences.
     /// </summary>

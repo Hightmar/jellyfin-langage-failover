@@ -69,9 +69,25 @@
             background: rgba(255,255,255,0.05);
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 6px;
-            transition: background 0.15s ease;
+            transition: background 0.15s ease, transform 0.1s ease;
+            cursor: grab;
+            user-select: none;
         }
         .lf-chip:hover { background: rgba(255,255,255,0.08); }
+        .lf-chip:active { cursor: grabbing; }
+        .lf-chip.lf-dragging { opacity: 0.4; }
+        .lf-chip.lf-drag-over {
+            border-color: var(--theme-primary-color, #00a4dc);
+            background: rgba(0,164,220,0.08);
+        }
+        .lf-drag-handle {
+            color: #666;
+            font-size: 1em;
+            line-height: 1;
+            padding: 0 0.1em;
+            cursor: grab;
+        }
+        .lf-chip:active .lf-drag-handle { cursor: grabbing; }
         .lf-chip-priority {
             display: inline-flex;
             align-items: center;
@@ -127,10 +143,10 @@
             flex: 1;
             min-width: 0;
             padding: 0.5em 0.6em;
-            background: rgba(255,255,255,0.05);
+            background: #fff;
             border: 1px solid rgba(255,255,255,0.12);
             border-radius: 4px;
-            color: #eee;
+            color: #111;
             font-size: 0.9em;
         }
         .lf-add-row button {
@@ -167,10 +183,10 @@
         .lf-user-select {
             width: 100%;
             padding: 0.6em 0.7em;
-            background: rgba(255,255,255,0.05);
+            background: #fff;
             border: 1px solid rgba(255,255,255,0.12);
             border-radius: 4px;
-            color: #eee;
+            color: #111;
             font-size: 0.95em;
         }
 
@@ -242,9 +258,6 @@
         }
 
         .lf-save-bar {
-            position: sticky;
-            bottom: 0;
-            background: linear-gradient(to top, rgba(20,20,20,0.95) 70%, rgba(20,20,20,0));
             padding: 1em 0;
             margin-top: 1.5em;
             display: flex;
@@ -329,10 +342,26 @@
                 </div>
 
                 <label class="lf-toggle-row" style="margin-top:1.2em">
+                    <input id="chkPreferOriginal" type="checkbox" />
+                    <span>
+                        <span class="lf-toggle-label">Prefer original audio (VO)</span>
+                        <span class="lf-toggle-hint">When a track is tagged as "Original" / "VO" / "Version Originale", it wins over the priority list.</span>
+                    </span>
+                </label>
+
+                <label class="lf-toggle-row">
                     <input id="chkPreferNonForced" type="checkbox" checked />
                     <span>
                         <span class="lf-toggle-label">Prefer non-forced subtitles</span>
                         <span class="lf-toggle-hint">Falls back to forced subtitles (signs/songs) only if complete ones are unavailable.</span>
+                    </span>
+                </label>
+
+                <label class="lf-toggle-row">
+                    <input id="chkPreferForcedWhenAudioMatches" type="checkbox" checked />
+                    <span>
+                        <span class="lf-toggle-label">Show forced subtitles when audio matches your language</span>
+                        <span class="lf-toggle-hint">Instead of disabling subtitles, keep forced ones to translate foreign dialog in the film.</span>
                     </span>
                 </label>
             </div>

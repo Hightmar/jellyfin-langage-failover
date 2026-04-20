@@ -25,17 +25,22 @@ function escapeHtml(s) {
 
 function renderLangList(listEl, languages, type) {
     listEl.innerHTML = '';
+    listEl.dataset.listType = type;
     if (!languages || languages.length === 0) {
         var empty = document.createElement('li');
         empty.className = 'lf-empty';
         empty.textContent = 'No languages added yet.';
         listEl.appendChild(empty);
+        setupListDragDrop(listEl);
         return;
     }
     languages.forEach(function (code, index) {
         var li = document.createElement('li');
         li.className = 'lf-chip';
+        li.draggable = true;
+        li.dataset.index = index;
         li.innerHTML =
+            '<span class="lf-drag-handle" title="Drag to reorder">&#x2630;</span>' +
             '<span class="lf-chip-priority">' + (index + 1) + '</span>' +
             '<span class="lf-chip-name">' + escapeHtml(getLangName(code)) +
                 '<span class="lf-chip-code">' + escapeHtml(code) + '</span></span>' +
@@ -48,6 +53,76 @@ function renderLangList(listEl, languages, type) {
             '</span>';
         listEl.appendChild(li);
     });
+    setupListDragDrop(listEl);
+}
+
+function setupListDragDrop(listEl) {
+    if (listEl.dataset.dragBound === '1') return;
+    listEl.dataset.dragBound = '1';
+
+    listEl.addEventListener('dragstart', function (e) {
+        var chip = e.target.closest('.lf-chip');
+        if (!chip) return;
+        chip.classList.add('lf-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', chip.dataset.index); } catch (_) {}
+    });
+
+    listEl.addEventListener('dragend', function () {
+        listEl.querySelectorAll('.lf-chip.lf-dragging').forEach(function (c) { c.classList.remove('lf-dragging'); });
+        listEl.querySelectorAll('.lf-chip.lf-drag-over').forEach(function (c) { c.classList.remove('lf-drag-over'); });
+    });
+
+    listEl.addEventListener('dragover', function (e) {
+        var chip = e.target.closest('.lf-chip');
+        if (!chip || chip.classList.contains('lf-dragging')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        listEl.querySelectorAll('.lf-chip.lf-drag-over').forEach(function (c) {
+            if (c !== chip) c.classList.remove('lf-drag-over');
+        });
+        chip.classList.add('lf-drag-over');
+    });
+
+    listEl.addEventListener('dragleave', function (e) {
+        var chip = e.target.closest('.lf-chip');
+        if (!chip) return;
+        if (!chip.contains(e.relatedTarget)) chip.classList.remove('lf-drag-over');
+    });
+
+    listEl.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var dragging = listEl.querySelector('.lf-chip.lf-dragging');
+        var target = e.target.closest('.lf-chip');
+        if (!dragging || !target || dragging === target) return;
+
+        var fromIdx = parseInt(dragging.dataset.index, 10);
+        var toIdx = parseInt(target.dataset.index, 10);
+
+        var codes = getCodesFromList(listEl);
+        var moved = codes.splice(fromIdx, 1)[0];
+        var insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+        codes.splice(insertIdx, 0, moved);
+
+        var type = listEl.dataset.listType;
+        renderLangList(listEl, codes, type);
+
+        var selectEl = getAssociatedSelect(listEl, type);
+        if (selectEl) refreshLangSelect(selectEl, codes);
+    });
+}
+
+function getAssociatedSelect(listEl, type) {
+    if (type === 'audio') return currentView.querySelector('#audioLangSelect');
+    if (type === 'subtitle') return currentView.querySelector('#subtitleLangSelect');
+    if (type && type.indexOf('ov_') === 0) {
+        var parts = type.split('_');
+        var ovIndex = parts[1];
+        var langType = parts[2];
+        var selId = langType === 'audio' ? 'soAudioSel_' + ovIndex : 'soSubSel_' + ovIndex;
+        return currentView.querySelector('#' + selId);
+    }
+    return null;
 }
 
 function refreshLangSelect(selectEl, excludedCodes) {
@@ -94,6 +169,8 @@ function getOrCreateUserPrefs(userId) {
         AudioLanguages: [],
         SubtitleLanguages: [],
         PreferNonForcedSubtitles: true,
+        PreferOriginalAudio: false,
+        PreferForcedWhenAudioMatches: true,
         Enabled: true,
         SeriesOverrides: []
     };
@@ -210,6 +287,8 @@ function loadUserPrefs() {
     var prefs = getOrCreateUserPrefs(currentUserId);
     view.querySelector('#chkEnabled').checked = prefs.Enabled !== false;
     view.querySelector('#chkPreferNonForced').checked = prefs.PreferNonForcedSubtitles !== false;
+    view.querySelector('#chkPreferOriginal').checked = prefs.PreferOriginalAudio === true;
+    view.querySelector('#chkPreferForcedWhenAudioMatches').checked = prefs.PreferForcedWhenAudioMatches !== false;
 
     var audioLangs = prefs.AudioLanguages || [];
     var subLangs = prefs.SubtitleLanguages || [];
@@ -252,6 +331,8 @@ function getCurrentPrefs() {
         AudioLanguages: getListCodes('audio'),
         SubtitleLanguages: getListCodes('subtitle'),
         PreferNonForcedSubtitles: currentView.querySelector('#chkPreferNonForced').checked,
+        PreferOriginalAudio: currentView.querySelector('#chkPreferOriginal').checked,
+        PreferForcedWhenAudioMatches: currentView.querySelector('#chkPreferForcedWhenAudioMatches').checked,
         Enabled: currentView.querySelector('#chkEnabled').checked,
         SeriesOverrides: getSeriesOverridesFromUI()
     };
