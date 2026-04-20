@@ -1,5 +1,12 @@
 # Jellyfin Language Failover
 
+[![Build](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/build.yml)
+[![Release](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/release.yml/badge.svg)](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/Hightmar/jellyfin-langage-failover?color=blue)](https://github.com/Hightmar/jellyfin-langage-failover/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Hightmar/jellyfin-langage-failover/total?color=green)](https://github.com/Hightmar/jellyfin-langage-failover/releases)
+[![Jellyfin](https://img.shields.io/badge/jellyfin-10.11.x-purple)](https://jellyfin.org)
+[![License](https://img.shields.io/github/license/Hightmar/jellyfin-langage-failover)](LICENSE)
+
 A Jellyfin plugin that provides per-user audio and subtitle language selection with priority-based fallback and per-series overrides.
 
 Jellyfin only supports a single default audio/subtitle language per user. This plugin adds ordered language priority lists, so the best available track is automatically selected on every playback start — including when binge-watching episodes on TV apps that don't preserve manual selections.
