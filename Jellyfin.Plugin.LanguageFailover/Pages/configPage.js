@@ -7,9 +7,7 @@ var LANG_NAMES = {
     nl: 'Dutch', sv: 'Swedish', no: 'Norwegian', da: 'Danish', fi: 'Finnish'
 };
 
-var LANG_OPTIONS_HTML = Object.keys(LANG_NAMES).map(function (code) {
-    return '<option value="' + code + '">' + LANG_NAMES[code] + ' (' + code + ')</option>';
-}).join('');
+var LANG_CODES = Object.keys(LANG_NAMES);
 
 var currentConfig = null;
 var currentUserId = null;
@@ -19,27 +17,61 @@ function getLangName(code) {
     return LANG_NAMES[code] || code.toUpperCase();
 }
 
+function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+}
+
 function renderLangList(listEl, languages, type) {
     listEl.innerHTML = '';
+    if (!languages || languages.length === 0) {
+        var empty = document.createElement('li');
+        empty.className = 'lf-empty';
+        empty.textContent = 'No languages added yet.';
+        listEl.appendChild(empty);
+        return;
+    }
     languages.forEach(function (code, index) {
         var li = document.createElement('li');
+        li.className = 'lf-chip';
         li.innerHTML =
-            '<span class="lang-priority">' + (index + 1) + '</span>' +
-            '<span class="lang-name">' + getLangName(code) + ' (' + code + ')</span>' +
-            '<button class="btnMoveUp" data-type="' + type + '" data-index="' + index + '"' +
-                (index === 0 ? ' disabled' : '') + '>&uarr;</button>' +
-            '<button class="btnMoveDown" data-type="' + type + '" data-index="' + index + '"' +
-                (index === languages.length - 1 ? ' disabled' : '') + '>&darr;</button>' +
-            '<button class="btnRemove" data-type="' + type + '" data-index="' + index + '">&times;</button>';
+            '<span class="lf-chip-priority">' + (index + 1) + '</span>' +
+            '<span class="lf-chip-name">' + escapeHtml(getLangName(code)) +
+                '<span class="lf-chip-code">' + escapeHtml(code) + '</span></span>' +
+            '<span class="lf-chip-actions">' +
+                '<button class="lf-icon-btn btnMoveUp" title="Move up" data-type="' + type + '" data-index="' + index + '"' +
+                    (index === 0 ? ' disabled' : '') + '>&#8593;</button>' +
+                '<button class="lf-icon-btn btnMoveDown" title="Move down" data-type="' + type + '" data-index="' + index + '"' +
+                    (index === languages.length - 1 ? ' disabled' : '') + '>&#8595;</button>' +
+                '<button class="lf-icon-btn lf-danger btnRemove" title="Remove" data-type="' + type + '" data-index="' + index + '">&times;</button>' +
+            '</span>';
         listEl.appendChild(li);
+    });
+}
+
+function refreshLangSelect(selectEl, excludedCodes) {
+    var excluded = {};
+    (excludedCodes || []).forEach(function (c) { excluded[c] = true; });
+    selectEl.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a language…';
+    selectEl.appendChild(placeholder);
+    LANG_CODES.forEach(function (code) {
+        if (excluded[code]) return;
+        var opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = getLangName(code) + ' (' + code + ')';
+        selectEl.appendChild(opt);
     });
 }
 
 function getCodesFromList(listEl) {
     var codes = [];
-    listEl.querySelectorAll('.lang-name').forEach(function (span) {
-        var match = span.textContent.match(/\(([^)]+)\)$/);
-        if (match) codes.push(match[1]);
+    listEl.querySelectorAll('.lf-chip').forEach(function (chip) {
+        var codeEl = chip.querySelector('.lf-chip-code');
+        if (codeEl) codes.push(codeEl.textContent.trim());
     });
     return codes;
 }
@@ -85,9 +117,16 @@ function saveUserPrefsToConfig(userId, prefs) {
 function renderSeriesOverrides(overrides) {
     var container = currentView.querySelector('#seriesOverridesList');
     container.innerHTML = '';
-    (overrides || []).forEach(function (ov, ovIndex) {
+    if (!overrides || overrides.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'lf-empty';
+        empty.textContent = 'No series overrides. Use the search above to add one.';
+        container.appendChild(empty);
+        return;
+    }
+    overrides.forEach(function (ov, ovIndex) {
         var div = document.createElement('div');
-        div.className = 'series-override';
+        div.className = 'lf-series-override';
         div.dataset.index = ovIndex;
 
         var audioListId = 'soAudio_' + ovIndex;
@@ -96,30 +135,37 @@ function renderSeriesOverrides(overrides) {
         var subSelId = 'soSubSel_' + ovIndex;
 
         div.innerHTML =
-            '<div class="series-override-header">' +
-                '<strong>' + (ov.SeriesName || ov.SeriesId) + '</strong>' +
-                '<button class="btnRemoveOverride" data-ov-index="' + ovIndex + '" style="color:#f44">&times; Remove</button>' +
+            '<div class="lf-series-override-header">' +
+                '<span class="lf-series-override-title">' + escapeHtml(ov.SeriesName || ov.SeriesId) + '</span>' +
+                '<button class="lf-icon-btn lf-danger btnRemoveOverride" title="Remove override" data-ov-index="' + ovIndex + '">&times;</button>' +
             '</div>' +
-            '<div style="font-size:0.9em">' +
-                '<div>Audio:</div>' +
-                '<ul id="' + audioListId + '" class="lang-list"></ul>' +
-                '<div class="lang-add-row">' +
-                    '<select id="' + audioSelId + '" multiple size="4" style="min-width:180px">' + LANG_OPTIONS_HTML + '</select>' +
-                    '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="audio">Add</button>' +
+            '<div class="lf-row">' +
+                '<div class="lf-col">' +
+                    '<div class="lf-subsection-title">Audio</div>' +
+                    '<ul id="' + audioListId + '" class="lf-chips"></ul>' +
+                    '<div class="lf-add-row">' +
+                        '<select id="' + audioSelId + '"></select>' +
+                        '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="audio">+ Add</button>' +
+                    '</div>' +
                 '</div>' +
-                '<div style="margin-top:0.5em">Subtitles:</div>' +
-                '<ul id="' + subListId + '" class="lang-list"></ul>' +
-                '<div class="lang-add-row">' +
-                    '<select id="' + subSelId + '" multiple size="4" style="min-width:180px">' + LANG_OPTIONS_HTML + '</select>' +
-                    '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="subtitle">Add</button>' +
+                '<div class="lf-col">' +
+                    '<div class="lf-subsection-title">Subtitles</div>' +
+                    '<ul id="' + subListId + '" class="lf-chips"></ul>' +
+                    '<div class="lf-add-row">' +
+                        '<select id="' + subSelId + '"></select>' +
+                        '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="subtitle">+ Add</button>' +
+                    '</div>' +
                 '</div>' +
             '</div>';
 
         container.appendChild(div);
 
-        // Render existing languages
-        renderLangList(div.querySelector('#' + audioListId), ov.AudioLanguages || [], 'ov_' + ovIndex + '_audio');
-        renderLangList(div.querySelector('#' + subListId), ov.SubtitleLanguages || [], 'ov_' + ovIndex + '_subtitle');
+        var audioLangs = ov.AudioLanguages || [];
+        var subLangs = ov.SubtitleLanguages || [];
+        renderLangList(div.querySelector('#' + audioListId), audioLangs, 'ov_' + ovIndex + '_audio');
+        renderLangList(div.querySelector('#' + subListId), subLangs, 'ov_' + ovIndex + '_subtitle');
+        refreshLangSelect(div.querySelector('#' + audioSelId), audioLangs);
+        refreshLangSelect(div.querySelector('#' + subSelId), subLangs);
     });
 }
 
@@ -128,15 +174,17 @@ function handleOverrideListAction(e) {
     if (!btn) return;
 
     var type = btn.dataset.type;
-    if (!type || !type.startsWith('ov_')) return;
+    if (!type || !type.indexOf || type.indexOf('ov_') !== 0) return;
 
     var index = parseInt(btn.dataset.index, 10);
     var parts = type.split('_');
     var ovIndex = parseInt(parts[1], 10);
-    var langType = parts[2]; // 'audio' or 'subtitle'
+    var langType = parts[2];
 
     var listId = langType === 'audio' ? 'soAudio_' + ovIndex : 'soSub_' + ovIndex;
+    var selId = langType === 'audio' ? 'soAudioSel_' + ovIndex : 'soSubSel_' + ovIndex;
     var listEl = currentView.querySelector('#' + listId);
+    var selectEl = currentView.querySelector('#' + selId);
     if (!listEl) return;
 
     var codes = getCodesFromList(listEl);
@@ -154,6 +202,7 @@ function handleOverrideListAction(e) {
     }
 
     renderLangList(listEl, codes, type);
+    if (selectEl) refreshLangSelect(selectEl, codes);
 }
 
 function loadUserPrefs() {
@@ -161,8 +210,13 @@ function loadUserPrefs() {
     var prefs = getOrCreateUserPrefs(currentUserId);
     view.querySelector('#chkEnabled').checked = prefs.Enabled !== false;
     view.querySelector('#chkPreferNonForced').checked = prefs.PreferNonForcedSubtitles !== false;
-    renderLangList(view.querySelector('#audioLangList'), prefs.AudioLanguages || [], 'audio');
-    renderLangList(view.querySelector('#subtitleLangList'), prefs.SubtitleLanguages || [], 'subtitle');
+
+    var audioLangs = prefs.AudioLanguages || [];
+    var subLangs = prefs.SubtitleLanguages || [];
+    renderLangList(view.querySelector('#audioLangList'), audioLangs, 'audio');
+    renderLangList(view.querySelector('#subtitleLangList'), subLangs, 'subtitle');
+    refreshLangSelect(view.querySelector('#audioLangSelect'), audioLangs);
+    refreshLangSelect(view.querySelector('#subtitleLangSelect'), subLangs);
     renderSeriesOverrides(prefs.SeriesOverrides || []);
 }
 
@@ -174,15 +228,12 @@ function getListCodes(type) {
 function getSeriesOverridesFromUI() {
     var overrides = [];
     var container = currentView.querySelector('#seriesOverridesList');
-    var blocks = container.querySelectorAll('.series-override');
+    var blocks = container.querySelectorAll('.lf-series-override');
     blocks.forEach(function (block, idx) {
-        var nameEl = block.querySelector('strong');
+        var nameEl = block.querySelector('.lf-series-override-title');
         var audioList = block.querySelector('#soAudio_' + idx);
         var subList = block.querySelector('#soSub_' + idx);
-        var removeBtn = block.querySelector('.btnRemoveOverride');
-        var seriesId = removeBtn ? removeBtn.dataset.seriesId : '';
 
-        // Get seriesId from the existing prefs
         var prefs = getOrCreateUserPrefs(currentUserId);
         var existingOv = (prefs.SeriesOverrides || [])[idx];
 
@@ -211,6 +262,7 @@ function handleListAction(e) {
     if (!btn) return;
 
     var type = btn.dataset.type;
+    if (type !== 'audio' && type !== 'subtitle') return;
     var index = parseInt(btn.dataset.index, 10);
     var codes = getListCodes(type);
 
@@ -227,24 +279,22 @@ function handleListAction(e) {
     }
 
     var listEl = currentView.querySelector(type === 'audio' ? '#audioLangList' : '#subtitleLangList');
+    var selectEl = currentView.querySelector(type === 'audio' ? '#audioLangSelect' : '#subtitleLangSelect');
     renderLangList(listEl, codes, type);
+    refreshLangSelect(selectEl, codes);
 }
 
-function addLanguages(type) {
+function addLanguage(type) {
     var selectEl = currentView.querySelector(type === 'audio' ? '#audioLangSelect' : '#subtitleLangSelect');
-    var selected = Array.from(selectEl.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
-    if (selected.length === 0) return;
+    var code = selectEl.value;
+    if (!code) return;
 
     var codes = getListCodes(type);
-    selected.forEach(function (code) {
-        if (codes.indexOf(code) === -1) {
-            codes.push(code);
-        }
-    });
+    if (codes.indexOf(code) === -1) codes.push(code);
 
     var listEl = currentView.querySelector(type === 'audio' ? '#audioLangList' : '#subtitleLangList');
     renderLangList(listEl, codes, type);
-    Array.from(selectEl.options).forEach(function (o) { o.selected = false; });
+    refreshLangSelect(selectEl, codes);
 }
 
 function searchSeries(query) {
@@ -262,12 +312,16 @@ function searchSeries(query) {
         Fields: 'PrimaryImageAspectRatio'
     }).then(function (result) {
         resultsList.innerHTML = '';
-        if (result.Items.length === 0) {
-            resultsList.innerHTML = '<li style="color:#999">No series found</li>';
+        if (!result.Items || result.Items.length === 0) {
+            var li = document.createElement('li');
+            li.className = 'lf-no-results';
+            li.textContent = 'No series found';
+            resultsList.appendChild(li);
         } else {
             result.Items.forEach(function (series) {
                 var li = document.createElement('li');
-                li.textContent = series.Name + (series.ProductionYear ? ' (' + series.ProductionYear + ')' : '');
+                var label = series.Name + (series.ProductionYear ? ' (' + series.ProductionYear + ')' : '');
+                li.textContent = label;
                 li.dataset.seriesId = series.Id.replace(/-/g, '');
                 li.dataset.seriesName = series.Name;
                 li.addEventListener('click', function () {
@@ -286,7 +340,6 @@ function addSeriesOverride(seriesId, seriesName) {
     var prefs = getCurrentPrefs();
     if (!prefs.SeriesOverrides) prefs.SeriesOverrides = [];
 
-    // Check if already exists
     var exists = prefs.SeriesOverrides.some(function (o) { return o.SeriesId === seriesId; });
     if (exists) {
         showStatus('Override for "' + seriesName + '" already exists.', true);
@@ -300,7 +353,6 @@ function addSeriesOverride(seriesId, seriesName) {
         SubtitleLanguages: []
     });
 
-    // Save to in-memory config and re-render
     saveUserPrefsToConfig(currentUserId, prefs);
     renderSeriesOverrides(prefs.SeriesOverrides);
 }
@@ -317,8 +369,8 @@ function removeSeriesOverride(ovIndex) {
 function showStatus(msg, isError) {
     var el = currentView.querySelector('#statusMessage');
     el.textContent = msg;
-    el.className = 'status-message ' + (isError ? 'error' : 'success');
-    setTimeout(function () { el.className = 'status-message'; }, 3000);
+    el.className = 'lf-status ' + (isError ? 'lf-status-error' : 'lf-status-success');
+    setTimeout(function () { el.className = 'lf-status'; }, 3000);
 }
 
 function doSave() {
@@ -375,10 +427,9 @@ export default function (view) {
 
     view.querySelector('#audioLangList').addEventListener('click', function (e) { handleListAction(e); });
     view.querySelector('#subtitleLangList').addEventListener('click', function (e) { handleListAction(e); });
-    view.querySelector('#btnAddAudio').addEventListener('click', function () { addLanguages('audio'); });
-    view.querySelector('#btnAddSubtitle').addEventListener('click', function () { addLanguages('subtitle'); });
+    view.querySelector('#btnAddAudio').addEventListener('click', function () { addLanguage('audio'); });
+    view.querySelector('#btnAddSubtitle').addEventListener('click', function () { addLanguage('subtitle'); });
 
-    // Series overrides - delegate events on the container
     view.querySelector('#seriesOverridesList').addEventListener('click', function (e) {
         var btn = e.target.closest('button');
         if (!btn) return;
@@ -397,31 +448,38 @@ export default function (view) {
             var listEl = view.querySelector('#' + listId);
             if (!selectEl || !listEl) return;
 
-            var selected = Array.from(selectEl.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
-            if (selected.length === 0) return;
+            var code = selectEl.value;
+            if (!code) return;
 
             var codes = getCodesFromList(listEl);
-            selected.forEach(function (code) {
-                if (codes.indexOf(code) === -1) codes.push(code);
-            });
+            if (codes.indexOf(code) === -1) codes.push(code);
+
             renderLangList(listEl, codes, 'ov_' + ovIndex + '_' + ovType);
-            Array.from(selectEl.options).forEach(function (o) { o.selected = false; });
+            refreshLangSelect(selectEl, codes);
             return;
         }
 
-        // Handle move up/down/remove within override language lists
         handleOverrideListAction(e);
     });
 
-    // Series search
     var searchTimeout = null;
-    view.querySelector('#seriesSearchInput').addEventListener('input', function () {
+    var searchInput = view.querySelector('#seriesSearchInput');
+    searchInput.addEventListener('input', function () {
         var query = this.value.trim();
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(function () { searchSeries(query); }, 300);
     });
-    view.querySelector('#btnSearchSeries').addEventListener('click', function () {
-        searchSeries(view.querySelector('#seriesSearchInput').value.trim());
+    searchInput.addEventListener('focus', function () {
+        if (this.value.trim().length >= 2) {
+            view.querySelector('#seriesSearchResults').style.display = 'block';
+        }
+    });
+    document.addEventListener('click', function (e) {
+        if (!view.contains(e.target)) return;
+        if (!e.target.closest('.lf-search-wrapper')) {
+            var results = view.querySelector('#seriesSearchResults');
+            if (results) results.style.display = 'none';
+        }
     });
 
     view.querySelector('#btnSave').addEventListener('click', doSave);
