@@ -1,0 +1,158 @@
+<div id="LanguageFailoverConfigPage" data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-controller="Language Failover.js">
+    <style>
+        .lang-list {
+            list-style: none;
+            padding: 0;
+            margin: 0.5em 0;
+            min-height: 2em;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.2);
+        }
+        .lang-list li {
+            display: flex;
+            align-items: center;
+            padding: 0.5em 0.8em;
+            border-bottom: 1px solid #333;
+            gap: 0.5em;
+        }
+        .lang-list li:last-child { border-bottom: none; }
+        .lang-list .lang-priority { color: #999; min-width: 1.5em; font-weight: bold; }
+        .lang-list .lang-name { flex: 1; }
+        .lang-list button {
+            background: transparent; border: 1px solid #555; color: #ccc;
+            cursor: pointer; padding: 0.2em 0.5em; border-radius: 3px; font-size: 0.85em;
+        }
+        .lang-list button:hover { background: #444; }
+        .lang-add-row { display: flex; gap: 0.5em; margin-top: 0.5em; align-items: center; }
+        .lang-add-row select { flex: 1; }
+        .section-title { margin-top: 1.5em; margin-bottom: 0.3em; font-weight: bold; }
+        .status-message { padding: 0.5em; margin-top: 1em; border-radius: 4px; display: none; }
+        .status-message.success { background: #1b5e20; color: #c8e6c9; display: block; }
+        .status-message.error { background: #b71c1c; color: #ffcdd2; display: block; }
+
+        .series-override {
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 0.8em;
+            margin-bottom: 0.8em;
+            background: rgba(0,0,0,0.15);
+        }
+        .series-override-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5em;
+        }
+        .series-override-header strong { flex: 1; }
+        .series-search-row { display: flex; gap: 0.5em; margin-top: 0.5em; align-items: center; }
+        .series-search-row input { flex: 1; }
+        .series-search-results {
+            list-style: none; padding: 0; margin: 0.3em 0 0 0;
+            border: 1px solid #444; border-radius: 4px;
+            max-height: 150px; overflow-y: auto;
+            display: none;
+        }
+        .series-search-results li {
+            padding: 0.4em 0.8em; cursor: pointer;
+        }
+        .series-search-results li:hover { background: #444; }
+    </style>
+
+    <div data-role="content">
+        <div class="content-primary">
+            <h2>Language Failover</h2>
+            <p>Configure per-user audio and subtitle language priorities with fallback.</p>
+
+            <div class="section-title">User</div>
+            <select id="selectUser"></select>
+
+            <div style="margin-top:1em">
+                <label>
+                    <input id="chkEnabled" type="checkbox" checked />
+                    Enable Language Failover for this user
+                </label>
+            </div>
+
+            <div class="section-title">Audio Language Priority</div>
+            <p style="color:#aaa;font-size:0.85em;">First match wins. Use arrows to reorder.</p>
+            <ul id="audioLangList" class="lang-list"></ul>
+            <div class="lang-add-row">
+                <select id="audioLangSelect" multiple size="6" style="min-width:200px">
+                    <option value="zh">Chinese (zh)</option>
+                    <option value="ko">Korean (ko)</option>
+                    <option value="ja">Japanese (ja)</option>
+                    <option value="en">English (en)</option>
+                    <option value="fr">French (fr)</option>
+                    <option value="de">German (de)</option>
+                    <option value="es">Spanish (es)</option>
+                    <option value="pt">Portuguese (pt)</option>
+                    <option value="it">Italian (it)</option>
+                    <option value="ru">Russian (ru)</option>
+                    <option value="ar">Arabic (ar)</option>
+                    <option value="hi">Hindi (hi)</option>
+                    <option value="th">Thai (th)</option>
+                    <option value="vi">Vietnamese (vi)</option>
+                    <option value="pl">Polish (pl)</option>
+                    <option value="nl">Dutch (nl)</option>
+                    <option value="sv">Swedish (sv)</option>
+                    <option value="no">Norwegian (no)</option>
+                    <option value="da">Danish (da)</option>
+                    <option value="fi">Finnish (fi)</option>
+                </select>
+                <button id="btnAddAudio" type="button" class="raised button-submit">Add</button>
+            </div>
+
+            <div class="section-title">Subtitle Language Priority</div>
+            <ul id="subtitleLangList" class="lang-list"></ul>
+            <div class="lang-add-row">
+                <select id="subtitleLangSelect" multiple size="6" style="min-width:200px">
+                    <option value="zh">Chinese (zh)</option>
+                    <option value="ko">Korean (ko)</option>
+                    <option value="ja">Japanese (ja)</option>
+                    <option value="en">English (en)</option>
+                    <option value="fr">French (fr)</option>
+                    <option value="de">German (de)</option>
+                    <option value="es">Spanish (es)</option>
+                    <option value="pt">Portuguese (pt)</option>
+                    <option value="it">Italian (it)</option>
+                    <option value="ru">Russian (ru)</option>
+                    <option value="ar">Arabic (ar)</option>
+                    <option value="hi">Hindi (hi)</option>
+                    <option value="th">Thai (th)</option>
+                    <option value="vi">Vietnamese (vi)</option>
+                    <option value="pl">Polish (pl)</option>
+                    <option value="nl">Dutch (nl)</option>
+                    <option value="sv">Swedish (sv)</option>
+                    <option value="no">Norwegian (no)</option>
+                    <option value="da">Danish (da)</option>
+                    <option value="fi">Finnish (fi)</option>
+                </select>
+                <button id="btnAddSubtitle" type="button" class="raised button-submit">Add</button>
+            </div>
+
+            <div style="margin-top:1em">
+                <label>
+                    <input id="chkPreferNonForced" type="checkbox" checked />
+                    Prefer non-forced (complete) subtitles over forced subtitles
+                </label>
+            </div>
+
+            <div class="section-title">Series Overrides</div>
+            <p style="color:#aaa;font-size:0.85em;">Override language preferences for specific series. Leave audio or subtitle empty to use the global preferences above.</p>
+            <div id="seriesOverridesList"></div>
+            <div class="series-search-row">
+                <input id="seriesSearchInput" type="text" placeholder="Search for a series..." />
+                <button id="btnSearchSeries" type="button" class="raised button-submit">Search</button>
+            </div>
+            <ul id="seriesSearchResults" class="series-search-results"></ul>
+
+            <div style="margin-top:1.5em">
+                <button id="btnSave" type="button" class="raised button-submit block">Save</button>
+            </div>
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Update meta.json version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          python3 -c "
+          import json
+          with open('Jellyfin.Plugin.LanguageFailover/meta.json', 'r') as f:
+              data = json.load(f)
+          data['version'] = '$VERSION'
+          data['timestamp'] = '$TIMESTAMP'
+          with open('Jellyfin.Plugin.LanguageFailover/meta.json', 'w') as f:
+              json.dump(data, f, indent=4)
+          "
+          cat Jellyfin.Plugin.LanguageFailover/meta.json
+
+      - name: Build
+        run: |
+          dotnet restore Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj
+          dotnet build Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj \
+            --configuration Release \
+            --no-restore \
+            -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Package
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p release
+          cp Jellyfin.Plugin.LanguageFailover/bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll release/
+          cp Jellyfin.Plugin.LanguageFailover/meta.json release/
+          cd release
+          ZIP_NAME="language-failover_${VERSION}.zip"
+          zip "$ZIP_NAME" Jellyfin.Plugin.LanguageFailover.dll meta.json
+          CHECKSUM=$(md5sum "$ZIP_NAME" | awk '{print $1}')
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+          echo "Checksum: $CHECKSUM"
+
+      - name: Get changelog
+        id: changelog
+        run: |
+          CHANGELOG=$(git log -1 --pretty=%B ${{ github.ref }} | head -20)
+          {
+            echo 'changelog<<EOF'
+            echo "$CHANGELOG"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Language Failover ${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: release/${{ steps.package.outputs.zip_name }}
+          draft: false
+          prerelease: false
+
+      - name: Update manifest.json on main
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          ZIP_NAME: ${{ steps.package.outputs.zip_name }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          SOURCE_URL="https://github.com/${REPO}/releases/download/${TAG}/${ZIP_NAME}"
+          CHANGELOG=$(git log -1 --pretty=%B ${{ github.ref }} | head -10 | tr '\n' ' ')
+
+          # Save new manifest data to temp file
+          git stash --include-untracked || true
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          python3 <<PYEOF
+          import json, os
+          path = 'manifest.json'
+          if os.path.exists(path):
+              with open(path, 'r') as f:
+                  manifest = json.load(f)
+          else:
+              manifest = []
+
+          guid = 'a5b6c7d8-1234-5678-9abc-def012345678'
+          plugin = None
+          for p in manifest:
+              if p.get('guid') == guid:
+                  plugin = p
+                  break
+
+          if plugin is None:
+              plugin = {
+                  'guid': guid,
+                  'name': 'Language Failover',
+                  'description': 'Per-user audio and subtitle language priority with fallback. Automatically selects the best audio and subtitle tracks based on an ordered language preference list, with per-series overrides.',
+                  'overview': 'Multi-language fallback for audio and subtitles',
+                  'owner': '${REPO}'.split('/')[0],
+                  'category': 'General',
+                  'versions': []
+              }
+              manifest.append(plugin)
+
+          new_version = {
+              'version': '${VERSION}',
+              'changelog': '''${CHANGELOG}'''.strip(),
+              'targetAbi': '10.11.0.0',
+              'sourceUrl': '${SOURCE_URL}',
+              'checksum': '${CHECKSUM}',
+              'timestamp': '${TIMESTAMP}'
+          }
+
+          plugin['versions'] = [v for v in plugin['versions'] if v.get('version') != '${VERSION}']
+          plugin['versions'].insert(0, new_version)
+
+          with open(path, 'w') as f:
+              json.dump(manifest, f, indent=2)
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+          # Also update meta.json on main to match the release
+          python3 -c "
+          import json
+          with open('Jellyfin.Plugin.LanguageFailover/meta.json', 'r') as f:
+              data = json.load(f)
+          data['version'] = '${VERSION}'
+          data['timestamp'] = '${TIMESTAMP}'
+          with open('Jellyfin.Plugin.LanguageFailover/meta.json', 'w') as f:
+              json.dump(data, f, indent=4)
+          "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json Jellyfin.Plugin.LanguageFailover/meta.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Release ${VERSION}: update manifest and meta.json"
+            git push origin main
+          fi
