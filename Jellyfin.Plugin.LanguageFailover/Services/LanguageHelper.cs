@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 
@@ -8,6 +9,10 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 /// </summary>
 public static class LanguageHelper
 {
+    private static readonly Regex OriginalVersionRegex = new(
+        @"\b(original|original\s+audio|original\s+language|original\s+version|version\s+originale|v\.?\s*o\.?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// Checks if a stream's language matches a preferred language code,
     /// handling ISO 639-1 (2-letter) and ISO 639-2 (3-letter) cross-matching.
@@ -74,6 +79,47 @@ public static class LanguageHelper
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Selects the audio stream marked as the original version (via stream title keywords
+    /// like "Original", "VO", "Version Originale"). Among matching streams, prefers the
+    /// highest channel count.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <returns>The index of the best original audio stream, or null if none is tagged as such.</returns>
+    public static int? SelectOriginalAudioStream(IReadOnlyList<MediaStream> streams)
+    {
+        var candidates = streams
+            .Where(s => s.Type == MediaStreamType.Audio)
+            .Where(s => !string.IsNullOrEmpty(s.Title) && OriginalVersionRegex.IsMatch(s.Title))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        return candidates.OrderByDescending(s => s.Channels ?? 0).First().Index;
+    }
+
+    /// <summary>
+    /// Selects a forced subtitle stream in the given language, if available.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="language">The language the subtitle must be in.</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>The index of the first forced subtitle matching the language, or null.</returns>
+    public static int? SelectForcedSubtitleForLanguage(
+        IReadOnlyList<MediaStream> streams,
+        string language,
+        ILocalizationManager localizationManager)
+    {
+        var forced = streams
+            .Where(s => s.Type == MediaStreamType.Subtitle && s.IsForced)
+            .FirstOrDefault(s => LanguageMatches(s.Language, language, localizationManager));
+
+        return forced?.Index;
     }
 
     /// <summary>

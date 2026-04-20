@@ -2,157 +2,387 @@
      class="page type-interior pluginConfigurationPage"
      data-controller="Language Failover.js">
     <style>
-        .lang-list {
-            list-style: none;
-            padding: 0;
-            margin: 0.5em 0;
-            min-height: 2em;
-            border: 1px solid #333;
-            border-radius: 4px;
-            background: rgba(0,0,0,0.2);
+        .lf-page { max-width: 960px; margin: 0 auto; padding-bottom: 6em; }
+        .lf-header { margin-bottom: 1.5em; }
+        .lf-header h1 {
+            margin: 0 0 0.3em 0;
+            font-size: 1.6em;
+            font-weight: 500;
+            letter-spacing: 0.01em;
         }
-        .lang-list li {
+        .lf-header p {
+            margin: 0;
+            color: #aaa;
+            font-size: 0.95em;
+        }
+
+        .lf-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 1.5em;
+            margin-bottom: 1.2em;
+        }
+        .lf-card-title {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 0 0 0.2em 0;
             display: flex;
             align-items: center;
-            padding: 0.5em 0.8em;
-            border-bottom: 1px solid #333;
             gap: 0.5em;
         }
-        .lang-list li:last-child { border-bottom: none; }
-        .lang-list .lang-priority { color: #999; min-width: 1.5em; font-weight: bold; }
-        .lang-list .lang-name { flex: 1; }
-        .lang-list button {
-            background: transparent; border: 1px solid #555; color: #ccc;
-            cursor: pointer; padding: 0.2em 0.5em; border-radius: 3px; font-size: 0.85em;
+        .lf-card-subtitle {
+            color: #999;
+            font-size: 0.85em;
+            margin: 0 0 1em 0;
         }
-        .lang-list button:hover { background: #444; }
-        .lang-add-row { display: flex; gap: 0.5em; margin-top: 0.5em; align-items: center; }
-        .lang-add-row select { flex: 1; }
-        .section-title { margin-top: 1.5em; margin-bottom: 0.3em; font-weight: bold; }
-        .status-message { padding: 0.5em; margin-top: 1em; border-radius: 4px; display: none; }
-        .status-message.success { background: #1b5e20; color: #c8e6c9; display: block; }
-        .status-message.error { background: #b71c1c; color: #ffcdd2; display: block; }
 
-        .series-override {
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 0.8em;
-            margin-bottom: 0.8em;
-            background: rgba(0,0,0,0.15);
+        .lf-row { display: flex; gap: 1.5em; flex-wrap: wrap; }
+        .lf-col { flex: 1; min-width: 280px; }
+
+        .lf-subsection-title {
+            font-size: 0.95em;
+            font-weight: 500;
+            margin: 0 0 0.3em 0;
+            color: #ddd;
         }
-        .series-override-header {
+        .lf-subsection-hint {
+            color: #888;
+            font-size: 0.8em;
+            margin: 0 0 0.8em 0;
+        }
+
+        .lf-chips {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35em;
+            margin: 0 0 0.8em 0;
+            padding: 0;
+            list-style: none;
+            min-height: 3em;
+        }
+        .lf-chip {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.5em;
+            gap: 0.6em;
+            padding: 0.5em 0.7em;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            transition: background 0.15s ease, transform 0.1s ease;
+            cursor: grab;
+            user-select: none;
         }
-        .series-override-header strong { flex: 1; }
-        .series-search-row { display: flex; gap: 0.5em; margin-top: 0.5em; align-items: center; }
-        .series-search-row input { flex: 1; }
-        .series-search-results {
-            list-style: none; padding: 0; margin: 0.3em 0 0 0;
-            border: 1px solid #444; border-radius: 4px;
-            max-height: 150px; overflow-y: auto;
+        .lf-chip:hover { background: rgba(255,255,255,0.08); }
+        .lf-chip:active { cursor: grabbing; }
+        .lf-chip.lf-dragging { opacity: 0.4; }
+        .lf-chip.lf-drag-over {
+            border-color: var(--theme-primary-color, #00a4dc);
+            background: rgba(0,164,220,0.08);
+        }
+        .lf-drag-handle {
+            color: #666;
+            font-size: 1em;
+            line-height: 1;
+            padding: 0 0.1em;
+            cursor: grab;
+        }
+        .lf-chip:active .lf-drag-handle { cursor: grabbing; }
+        .lf-chip-priority {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.6em;
+            height: 1.6em;
+            padding: 0 0.4em;
+            background: var(--theme-primary-color, #00a4dc);
+            color: #fff;
+            border-radius: 50%;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        .lf-chip-name { flex: 1; font-size: 0.95em; }
+        .lf-chip-code { color: #888; font-size: 0.8em; margin-left: 0.3em; }
+        .lf-chip-actions { display: flex; gap: 0.2em; }
+        .lf-icon-btn {
+            background: transparent;
+            border: none;
+            color: #bbb;
+            cursor: pointer;
+            width: 1.9em;
+            height: 1.9em;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1em;
+            transition: background 0.15s ease, color 0.15s ease;
+            padding: 0;
+        }
+        .lf-icon-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #fff; }
+        .lf-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .lf-icon-btn.lf-danger:hover:not(:disabled) { background: rgba(244,67,54,0.18); color: #ff6b6b; }
+
+        .lf-empty {
+            padding: 1em;
+            text-align: center;
+            color: #777;
+            font-style: italic;
+            font-size: 0.85em;
+            border: 1px dashed rgba(255,255,255,0.1);
+            border-radius: 6px;
+            margin-bottom: 0.8em;
+        }
+
+        .lf-add-row {
+            display: flex;
+            gap: 0.5em;
+            align-items: stretch;
+        }
+        .lf-add-row select {
+            flex: 1;
+            min-width: 0;
+            padding: 0.5em 0.6em;
+            background: #fff;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px;
+            color: #111;
+            font-size: 0.9em;
+        }
+        .lf-add-row button {
+            padding: 0 1em;
+            background: var(--theme-primary-color, #00a4dc);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: background 0.15s ease;
+            white-space: nowrap;
+        }
+        .lf-add-row button:hover { filter: brightness(1.1); }
+        .lf-add-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .lf-toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6em;
+            padding: 0.6em 0;
+            cursor: pointer;
+        }
+        .lf-toggle-row input[type="checkbox"] {
+            width: 1.1em;
+            height: 1.1em;
+            cursor: pointer;
+            accent-color: var(--theme-primary-color, #00a4dc);
+        }
+        .lf-toggle-label { font-size: 0.95em; }
+        .lf-toggle-hint { color: #888; font-size: 0.8em; display: block; margin-top: 0.1em; }
+
+        .lf-user-select {
+            width: 100%;
+            padding: 0.6em 0.7em;
+            background: #fff;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px;
+            color: #111;
+            font-size: 0.95em;
+        }
+
+        .lf-search-wrapper { position: relative; }
+        .lf-search-input {
+            width: 100%;
+            padding: 0.6em 0.7em 0.6em 2.2em;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px;
+            color: #eee;
+            font-size: 0.95em;
+            box-sizing: border-box;
+        }
+        .lf-search-icon {
+            position: absolute;
+            left: 0.7em;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #888;
+            pointer-events: none;
+            font-size: 1em;
+        }
+        .lf-search-results {
+            list-style: none;
+            padding: 0.3em 0;
+            margin: 0.3em 0 0 0;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            background: #1c1c1c;
+            max-height: 240px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .lf-search-results li {
+            padding: 0.6em 0.8em;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.1s ease;
+        }
+        .lf-search-results li:hover { background: rgba(255,255,255,0.08); }
+        .lf-search-results li.lf-no-results {
+            color: #888;
+            cursor: default;
+            font-style: italic;
+        }
+        .lf-search-results li.lf-no-results:hover { background: transparent; }
+
+        .lf-series-override {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            padding: 1em;
+            margin-bottom: 0.8em;
+        }
+        .lf-series-override-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            margin-bottom: 0.8em;
+            padding-bottom: 0.6em;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .lf-series-override-title {
+            flex: 1;
+            font-weight: 500;
+            font-size: 0.98em;
+        }
+
+        .lf-save-bar {
+            padding: 1em 0;
+            margin-top: 1.5em;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 1em;
+        }
+        .lf-save-btn {
+            padding: 0.7em 2em;
+            background: var(--theme-primary-color, #00a4dc);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: background 0.15s ease;
+        }
+        .lf-save-btn:hover { filter: brightness(1.1); }
+
+        .lf-status {
+            padding: 0.5em 0.9em;
+            border-radius: 4px;
+            font-size: 0.9em;
             display: none;
         }
-        .series-search-results li {
-            padding: 0.4em 0.8em; cursor: pointer;
+        .lf-status.lf-status-success {
+            background: rgba(76,175,80,0.15);
+            color: #a5d6a7;
+            border: 1px solid rgba(76,175,80,0.3);
+            display: inline-block;
         }
-        .series-search-results li:hover { background: #444; }
+        .lf-status.lf-status-error {
+            background: rgba(244,67,54,0.15);
+            color: #ef9a9a;
+            border: 1px solid rgba(244,67,54,0.3);
+            display: inline-block;
+        }
     </style>
 
     <div data-role="content">
-        <div class="content-primary">
-            <h2>Language Failover</h2>
-            <p>Configure per-user audio and subtitle language priorities with fallback.</p>
+        <div class="content-primary lf-page">
+            <div class="lf-header">
+                <h1>Language Failover</h1>
+                <p>Per-user audio and subtitle language priorities with fallback.</p>
+            </div>
 
-            <div class="section-title">User</div>
-            <select id="selectUser"></select>
-
-            <div style="margin-top:1em">
-                <label>
+            <div class="lf-card">
+                <div class="lf-card-title">User</div>
+                <p class="lf-card-subtitle">Select the user whose preferences you want to configure.</p>
+                <select id="selectUser" class="lf-user-select"></select>
+                <label class="lf-toggle-row" style="margin-top:1em">
                     <input id="chkEnabled" type="checkbox" checked />
-                    Enable Language Failover for this user
+                    <span class="lf-toggle-label">Enable Language Failover for this user</span>
                 </label>
             </div>
 
-            <div class="section-title">Audio Language Priority</div>
-            <p style="color:#aaa;font-size:0.85em;">First match wins. Use arrows to reorder.</p>
-            <ul id="audioLangList" class="lang-list"></ul>
-            <div class="lang-add-row">
-                <select id="audioLangSelect" multiple size="6" style="min-width:200px">
-                    <option value="zh">Chinese (zh)</option>
-                    <option value="ko">Korean (ko)</option>
-                    <option value="ja">Japanese (ja)</option>
-                    <option value="en">English (en)</option>
-                    <option value="fr">French (fr)</option>
-                    <option value="de">German (de)</option>
-                    <option value="es">Spanish (es)</option>
-                    <option value="pt">Portuguese (pt)</option>
-                    <option value="it">Italian (it)</option>
-                    <option value="ru">Russian (ru)</option>
-                    <option value="ar">Arabic (ar)</option>
-                    <option value="hi">Hindi (hi)</option>
-                    <option value="th">Thai (th)</option>
-                    <option value="vi">Vietnamese (vi)</option>
-                    <option value="pl">Polish (pl)</option>
-                    <option value="nl">Dutch (nl)</option>
-                    <option value="sv">Swedish (sv)</option>
-                    <option value="no">Norwegian (no)</option>
-                    <option value="da">Danish (da)</option>
-                    <option value="fi">Finnish (fi)</option>
-                </select>
-                <button id="btnAddAudio" type="button" class="raised button-submit">Add</button>
-            </div>
+            <div class="lf-card">
+                <div class="lf-card-title">Global Language Priorities</div>
+                <p class="lf-card-subtitle">The first available match in the media wins. Subtitles are automatically skipped when the selected audio is already in one of your subtitle languages.</p>
 
-            <div class="section-title">Subtitle Language Priority</div>
-            <ul id="subtitleLangList" class="lang-list"></ul>
-            <div class="lang-add-row">
-                <select id="subtitleLangSelect" multiple size="6" style="min-width:200px">
-                    <option value="zh">Chinese (zh)</option>
-                    <option value="ko">Korean (ko)</option>
-                    <option value="ja">Japanese (ja)</option>
-                    <option value="en">English (en)</option>
-                    <option value="fr">French (fr)</option>
-                    <option value="de">German (de)</option>
-                    <option value="es">Spanish (es)</option>
-                    <option value="pt">Portuguese (pt)</option>
-                    <option value="it">Italian (it)</option>
-                    <option value="ru">Russian (ru)</option>
-                    <option value="ar">Arabic (ar)</option>
-                    <option value="hi">Hindi (hi)</option>
-                    <option value="th">Thai (th)</option>
-                    <option value="vi">Vietnamese (vi)</option>
-                    <option value="pl">Polish (pl)</option>
-                    <option value="nl">Dutch (nl)</option>
-                    <option value="sv">Swedish (sv)</option>
-                    <option value="no">Norwegian (no)</option>
-                    <option value="da">Danish (da)</option>
-                    <option value="fi">Finnish (fi)</option>
-                </select>
-                <button id="btnAddSubtitle" type="button" class="raised button-submit">Add</button>
-            </div>
+                <div class="lf-row">
+                    <div class="lf-col">
+                        <div class="lf-subsection-title">Audio</div>
+                        <p class="lf-subsection-hint">Ordered from most to least preferred. Surround tracks win ties.</p>
+                        <ul id="audioLangList" class="lf-chips"></ul>
+                        <div class="lf-add-row">
+                            <select id="audioLangSelect"></select>
+                            <button id="btnAddAudio" type="button">+ Add</button>
+                        </div>
+                    </div>
 
-            <div style="margin-top:1em">
-                <label>
+                    <div class="lf-col">
+                        <div class="lf-subsection-title">Subtitles</div>
+                        <p class="lf-subsection-hint">Ordered from most to least preferred.</p>
+                        <ul id="subtitleLangList" class="lf-chips"></ul>
+                        <div class="lf-add-row">
+                            <select id="subtitleLangSelect"></select>
+                            <button id="btnAddSubtitle" type="button">+ Add</button>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="lf-toggle-row" style="margin-top:1.2em">
+                    <input id="chkPreferOriginal" type="checkbox" />
+                    <span>
+                        <span class="lf-toggle-label">Prefer original audio (VO)</span>
+                        <span class="lf-toggle-hint">When a track is tagged as "Original" / "VO" / "Version Originale", it wins over the priority list.</span>
+                    </span>
+                </label>
+
+                <label class="lf-toggle-row">
                     <input id="chkPreferNonForced" type="checkbox" checked />
-                    Prefer non-forced (complete) subtitles over forced subtitles
+                    <span>
+                        <span class="lf-toggle-label">Prefer non-forced subtitles</span>
+                        <span class="lf-toggle-hint">Falls back to forced subtitles (signs/songs) only if complete ones are unavailable.</span>
+                    </span>
+                </label>
+
+                <label class="lf-toggle-row">
+                    <input id="chkPreferForcedWhenAudioMatches" type="checkbox" checked />
+                    <span>
+                        <span class="lf-toggle-label">Show forced subtitles when audio matches your language</span>
+                        <span class="lf-toggle-hint">Instead of disabling subtitles, keep forced ones to translate foreign dialog in the film.</span>
+                    </span>
                 </label>
             </div>
 
-            <div class="section-title">Series Overrides</div>
-            <p style="color:#aaa;font-size:0.85em;">Override language preferences for specific series. Leave audio or subtitle empty to use the global preferences above.</p>
-            <div id="seriesOverridesList"></div>
-            <div class="series-search-row">
-                <input id="seriesSearchInput" type="text" placeholder="Search for a series..." />
-                <button id="btnSearchSeries" type="button" class="raised button-submit">Search</button>
-            </div>
-            <ul id="seriesSearchResults" class="series-search-results"></ul>
+            <div class="lf-card">
+                <div class="lf-card-title">Series Overrides</div>
+                <p class="lf-card-subtitle">Override the global preferences for specific series. Leave a language list empty to inherit the global setting for that track.</p>
 
-            <div style="margin-top:1.5em">
-                <button id="btnSave" type="button" class="raised button-submit block">Save</button>
+                <div class="lf-search-wrapper">
+                    <span class="lf-search-icon">&#128269;</span>
+                    <input id="seriesSearchInput" type="text" class="lf-search-input" placeholder="Search for a series to add…" autocomplete="off" />
+                    <ul id="seriesSearchResults" class="lf-search-results"></ul>
+                </div>
+
+                <div id="seriesOverridesList" style="margin-top:1em"></div>
             </div>
-            <div id="statusMessage" class="status-message"></div>
+
+            <div class="lf-save-bar">
+                <span id="statusMessage" class="lf-status"></span>
+                <button id="btnSave" type="button" class="lf-save-btn">Save</button>
+            </div>
         </div>
     </div>
 </div>

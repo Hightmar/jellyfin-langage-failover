@@ -120,6 +120,8 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                 AudioLanguages = audioLangs.ToList(),
                 SubtitleLanguages = subtitleLangs.ToList(),
                 PreferNonForcedSubtitles = prefs.PreferNonForcedSubtitles,
+                PreferOriginalAudio = prefs.PreferOriginalAudio,
+                PreferForcedWhenAudioMatches = prefs.PreferForcedWhenAudioMatches,
                 Enabled = true
             };
 
@@ -152,12 +154,31 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
         string sessionId,
         string? itemName)
     {
-        if (prefs.AudioLanguages.Count == 0)
+        int? bestAudioIndex = null;
+
+        // If user prefers original version, try to find an audio stream tagged as "original" first
+        if (prefs.PreferOriginalAudio)
         {
-            return null;
+            bestAudioIndex = LanguageHelper.SelectOriginalAudioStream(streams);
+            if (bestAudioIndex is not null)
+            {
+                _logger.LogInformation(
+                    "Language Failover: Selected original-version audio stream at index {Index} for '{ItemName}'",
+                    bestAudioIndex.Value,
+                    itemName);
+            }
         }
 
-        var bestAudioIndex = LanguageHelper.SelectBestAudioStream(streams, prefs.AudioLanguages, _localizationManager);
+        if (bestAudioIndex is null)
+        {
+            if (prefs.AudioLanguages.Count == 0)
+            {
+                return null;
+            }
+
+            bestAudioIndex = LanguageHelper.SelectBestAudioStream(streams, prefs.AudioLanguages, _localizationManager);
+        }
+
         if (bestAudioIndex is null)
         {
             _logger.LogDebug(
@@ -203,32 +224,66 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             return;
         }
 
-        // If audio is already in one of the preferred subtitle languages, skip subtitles
+        // If audio is already in one of the preferred subtitle languages, either skip subtitles
+        // entirely or switch to forced subtitles (useful for translating foreign dialog).
         if (!string.IsNullOrEmpty(selectedAudioLang))
         {
             foreach (var subLang in prefs.SubtitleLanguages)
             {
-                if (LanguageHelper.LanguageMatches(selectedAudioLang, subLang, _localizationManager))
+                if (!LanguageHelper.LanguageMatches(selectedAudioLang, subLang, _localizationManager))
                 {
-                    _logger.LogInformation(
-                        "Language Failover: Audio is already in subtitle language '{Lang}', disabling subtitles for '{ItemName}'",
-                        subLang,
-                        itemName);
-
-                    var disableCmd = new GeneralCommand
-                    {
-                        Name = GeneralCommandType.SetSubtitleStreamIndex,
-                        Arguments = { ["Index"] = "-1" }
-                    };
-
-                    await _sessionManager.SendGeneralCommand(
-                        string.Empty,
-                        sessionId,
-                        disableCmd,
-                        CancellationToken.None).ConfigureAwait(false);
-
-                    return;
+                    continue;
                 }
+
+                if (prefs.PreferForcedWhenAudioMatches)
+                {
+                    var forcedIdx = LanguageHelper.SelectForcedSubtitleForLanguage(
+                        streams,
+                        subLang,
+                        _localizationManager);
+
+                    if (forcedIdx is not null)
+                    {
+                        _logger.LogInformation(
+                            "Language Failover: Audio is in '{Lang}' — selecting forced subtitle stream at index {Index} for '{ItemName}'",
+                            subLang,
+                            forcedIdx.Value,
+                            itemName);
+
+                        var forcedCmd = new GeneralCommand
+                        {
+                            Name = GeneralCommandType.SetSubtitleStreamIndex,
+                            Arguments = { ["Index"] = forcedIdx.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) }
+                        };
+
+                        await _sessionManager.SendGeneralCommand(
+                            string.Empty,
+                            sessionId,
+                            forcedCmd,
+                            CancellationToken.None).ConfigureAwait(false);
+
+                        return;
+                    }
+                }
+
+                _logger.LogInformation(
+                    "Language Failover: Audio is already in subtitle language '{Lang}', disabling subtitles for '{ItemName}'",
+                    subLang,
+                    itemName);
+
+                var disableCmd = new GeneralCommand
+                {
+                    Name = GeneralCommandType.SetSubtitleStreamIndex,
+                    Arguments = { ["Index"] = "-1" }
+                };
+
+                await _sessionManager.SendGeneralCommand(
+                    string.Empty,
+                    sessionId,
+                    disableCmd,
+                    CancellationToken.None).ConfigureAwait(false);
+
+                return;
             }
         }
 
