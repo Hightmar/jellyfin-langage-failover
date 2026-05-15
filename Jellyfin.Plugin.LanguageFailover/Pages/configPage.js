@@ -1,17 +1,54 @@
 var pluginId = 'a5b6c7d8-1234-5678-9abc-def012345678';
 
-var LANG_NAMES = {
-    zh: 'Chinese', ko: 'Korean', ja: 'Japanese', en: 'English', fr: 'French',
-    de: 'German', es: 'Spanish', pt: 'Portuguese', it: 'Italian', ru: 'Russian',
-    ar: 'Arabic', hi: 'Hindi', th: 'Thai', vi: 'Vietnamese', pl: 'Polish',
-    nl: 'Dutch', sv: 'Swedish', no: 'Norwegian', da: 'Danish', fi: 'Finnish'
-};
+// Populated at viewshow from ApiClient.getCultures(). Falls back to a small
+// hardcoded list if the API call fails so the page still works.
+var LANG_LIST = [];
+var LANG_NAMES = {};
 
-var LANG_CODES = Object.keys(LANG_NAMES);
+var FALLBACK_LANGS = [
+    { code: 'en', name: 'English' }, { code: 'fr', name: 'French' },
+    { code: 'es', name: 'Spanish' }, { code: 'de', name: 'German' },
+    { code: 'it', name: 'Italian' }, { code: 'pt', name: 'Portuguese' },
+    { code: 'ru', name: 'Russian' }, { code: 'ja', name: 'Japanese' },
+    { code: 'ko', name: 'Korean' }, { code: 'zh', name: 'Chinese' },
+    { code: 'ar', name: 'Arabic' }, { code: 'hi', name: 'Hindi' },
+    { code: 'nl', name: 'Dutch' }, { code: 'pl', name: 'Polish' },
+    { code: 'sv', name: 'Swedish' }, { code: 'tr', name: 'Turkish' }
+];
 
 var currentConfig = null;
 var currentUserId = null;
 var currentView = null;
+var culturesLoaded = false;
+
+function applyLangList(list) {
+    LANG_LIST = list.slice().sort(function (a, b) {
+        return a.name.localeCompare(b.name);
+    });
+    LANG_NAMES = {};
+    LANG_LIST.forEach(function (l) { LANG_NAMES[l.code] = l.name; });
+}
+
+function loadCultures() {
+    if (culturesLoaded) return Promise.resolve();
+    return ApiClient.getCultures().then(function (cultures) {
+        var byKey = {};
+        cultures.forEach(function (c) {
+            var code = c.TwoLetterISOLanguageName || c.ThreeLetterISOLanguageName;
+            if (!code) return;
+            if (!byKey[code]) {
+                byKey[code] = { code: code, name: c.DisplayName || c.Name || code };
+            }
+        });
+        var arr = [];
+        Object.keys(byKey).forEach(function (k) { arr.push(byKey[k]); });
+        applyLangList(arr);
+        culturesLoaded = true;
+    }).catch(function () {
+        applyLangList(FALLBACK_LANGS);
+        culturesLoaded = true;
+    });
+}
 
 function getLangName(code) {
     return LANG_NAMES[code] || code.toUpperCase();
@@ -133,11 +170,11 @@ function refreshLangSelect(selectEl, excludedCodes) {
     placeholder.value = '';
     placeholder.textContent = 'Select a language…';
     selectEl.appendChild(placeholder);
-    LANG_CODES.forEach(function (code) {
-        if (excluded[code]) return;
+    LANG_LIST.forEach(function (l) {
+        if (excluded[l.code]) return;
         var opt = document.createElement('option');
-        opt.value = code;
-        opt.textContent = getLangName(code) + ' (' + code + ')';
+        opt.value = l.code;
+        opt.textContent = l.name + ' (' + l.code + ')';
         selectEl.appendChild(opt);
     });
 }
@@ -474,7 +511,9 @@ export default function (view) {
     currentView = view;
 
     view.addEventListener('viewshow', function () {
-        ApiClient.getUsers().then(function (users) {
+        loadCultures().then(function () {
+            return ApiClient.getUsers();
+        }).then(function (users) {
             var selectUser = view.querySelector('#selectUser');
             var previousUserId = currentUserId;
             selectUser.innerHTML = '';
