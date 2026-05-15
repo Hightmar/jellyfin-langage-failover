@@ -13,8 +13,10 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 
 ## Features
 
-- **Ordered language priorities** — Define a ranked list of preferred languages for audio and subtitles (e.g., Audio: Chinese > Korean > Japanese > English > French). The first available match wins.
+- **Ordered language priorities** — Define a ranked list of preferred languages for audio and subtitles (e.g., Audio: Chinese > Korean > Japanese > English > French). The first available match wins. Reorder by drag-and-drop or with the up/down arrows.
+- **Prefer original audio (VO)** — Optional toggle that picks the track tagged as "Original" / "VO" / "Version Originale" over the priority list. Useful when watching a foreign film in its original language regardless of dubs available.
 - **Smart subtitle behavior** — Subtitles are automatically enabled only when the audio is not in your subtitle language. If you set subtitles to French and the audio is already French, subtitles are disabled.
+- **Forced subtitles when audio matches your language** — Optional toggle: instead of disabling subtitles when audio is already in your language, keep forced subtitles on to translate foreign dialog or signage.
 - **Forced subtitle fallback** — Prefers complete (non-forced) subtitles, but falls back to forced subtitles when they're the only option available.
 - **Per-series overrides** — Override language preferences for specific series. For example, keep your global preferences but force a specific anime to always play with its original audio.
 - **Per-user configuration** — Each user has independent language preferences and series overrides.
@@ -27,8 +29,8 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 2. It looks up the user's configured language priorities
 3. If the item is a TV episode, it checks for series-specific overrides
 4. It analyzes all available audio/subtitle streams on the media file
-5. It selects the best audio track (highest priority language, preferring surround over stereo)
-6. It selects the best subtitle track (only if audio isn't in the subtitle language already)
+5. **Audio selection**: if "Prefer original audio" is on and a track is tagged as Original/VO, it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
+6. **Subtitle selection**: if the selected audio is in one of your subtitle languages, subtitles are either disabled or switched to forced (when "Show forced subtitles when audio matches" is on); otherwise the best subtitle track in your priority order is selected
 7. It sends `SetAudioStreamIndex` / `SetSubtitleStreamIndex` commands to the client
 
 There is a brief moment (~1-2 seconds) with the default tracks before the plugin's selection takes effect. This is inherent to the plugin architecture — Jellyfin does not provide a hook to intercept track selection before playback begins.
@@ -80,10 +82,12 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 
 1. **Select a user** from the dropdown
 2. **Enable/disable** Language Failover for that user
-3. **Audio Language Priority** — Add languages and reorder them by priority using the arrow buttons. The first available match in the media file wins. Among streams of the same language, surround sound (5.1/7.1) is preferred over stereo.
+3. **Audio Language Priority** — Add languages and reorder them by drag-and-drop (or with the up/down arrows). The first available match in the media file wins. Among streams of the same language, surround sound (5.1/7.1) is preferred over stereo.
 4. **Subtitle Language Priority** — Same principle. Subtitles are only activated if the selected audio is not already in one of the subtitle languages.
 5. **Prefer non-forced subtitles** — When checked, complete subtitles are preferred over forced (signs/songs only) subtitles. If only forced subtitles are available, they will still be selected as a fallback.
-6. **Save**
+6. **Prefer original audio (VO)** — When checked, a track tagged as Original / VO / Version Originale beats the priority list. Falls back to the priority list if no track is tagged.
+7. **Show forced subtitles when audio matches your language** — When checked, instead of disabling subtitles in the case where audio already matches one of your subtitle languages, the plugin selects a forced subtitle track in that language if one exists. Useful for translating foreign dialog or on-screen text in an otherwise native-language film.
+8. **Save**
 
 ### Series Overrides
 
@@ -98,7 +102,7 @@ Below the global preferences, you can add per-series overrides:
 
 ## Supported Languages
 
-The configuration page includes 20 common languages: Chinese, Korean, Japanese, English, French, German, Spanish, Portuguese, Italian, Russian, Arabic, Hindi, Thai, Vietnamese, Polish, Dutch, Swedish, Norwegian, Danish, and Finnish.
+The configuration page loads the full language list from Jellyfin's localization API at runtime, so every language your server recognises is selectable.
 
 The plugin uses ISO 639 language matching with cross-format support (ISO 639-1 two-letter codes like `fr` match ISO 639-2 three-letter codes like `fra`/`fre`), so it works regardless of how your media files are tagged.
 
@@ -130,8 +134,8 @@ Some clients may override the plugin's selection with their own defaults. The pl
 Releases are automated via GitHub Actions. To publish a new version:
 
 ```bash
-git tag v1.0.0.0 -m "Release 1.0.0.0"
-git push origin v1.0.0.0
+git tag v1.1.0.1 -m "Release 1.1.0.1"
+git push origin v1.1.0.1
 ```
 
 The workflow will:
