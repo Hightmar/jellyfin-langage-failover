@@ -13,6 +13,51 @@ public static class LanguageHelper
         @"\b(original|original\s+audio|original\s+language|original\s+version|version\s+originale|v\.?\s*o\.?)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex ForcedSubtitleRegex = new(
+        @"\b(forced|forc[ée]e?s?|forzado(?:s)?|forzat[io]|erzwungen)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Guards against false positives like "non-forced", "non forcé", "not forced".
+    private static readonly Regex NonForcedSubtitleRegex = new(
+        @"\b(?:non|not)[\s-]?forc",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Determines whether a subtitle stream is "forced".
+    /// Many media files do not set the container forced disposition flag and instead
+    /// indicate it only in the stream title (e.g. "Forced", "Forcé"), so this checks both
+    /// the <see cref="MediaStream.IsForced"/> flag and forced keywords in the stream title
+    /// and the composed display title.
+    /// </summary>
+    /// <param name="stream">The subtitle stream to inspect.</param>
+    /// <returns>True if the stream is forced.</returns>
+    public static bool IsForcedSubtitle(MediaStream stream)
+    {
+        if (stream.IsForced)
+        {
+            return true;
+        }
+
+        return TitleIndicatesForced(stream.Title) || TitleIndicatesForced(stream.DisplayTitle);
+    }
+
+    private static bool TitleIndicatesForced(string? title)
+    {
+        if (string.IsNullOrEmpty(title))
+        {
+            return false;
+        }
+
+        // A title that explicitly negates "forced" (e.g. "Non-Forced", "Full / not forced")
+        // describes a complete track, so do not treat it as forced.
+        if (NonForcedSubtitleRegex.IsMatch(title))
+        {
+            return false;
+        }
+
+        return ForcedSubtitleRegex.IsMatch(title);
+    }
+
     /// <summary>
     /// Checks if a stream's language matches a preferred language code,
     /// handling ISO 639-1 (2-letter) and ISO 639-2 (3-letter) cross-matching.
@@ -116,7 +161,7 @@ public static class LanguageHelper
         ILocalizationManager localizationManager)
     {
         var forced = streams
-            .Where(s => s.Type == MediaStreamType.Subtitle && s.IsForced)
+            .Where(s => s.Type == MediaStreamType.Subtitle && IsForcedSubtitle(s))
             .FirstOrDefault(s => LanguageMatches(s.Language, language, localizationManager));
 
         return forced?.Index;
@@ -191,7 +236,7 @@ public static class LanguageHelper
             {
                 if (preferNonForced)
                 {
-                    var nonForced = matches.Where(s => !s.IsForced).ToList();
+                    var nonForced = matches.Where(s => !IsForcedSubtitle(s)).ToList();
                     if (nonForced.Count > 0)
                     {
                         return nonForced.First().Index;
