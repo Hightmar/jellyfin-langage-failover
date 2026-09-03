@@ -1,14 +1,14 @@
 {
     "category": "General",
-    "changelog": "",
+    "changelog": "Merge branch 'develop'",
     "description": "Per-user audio and subtitle language priority with fallback. Automatically selects the best audio and subtitle tracks based on an ordered language preference list, with per-series overrides.",
     "guid": "a5b6c7d8-1234-5678-9abc-def012345678",
     "name": "Language Failover",
     "overview": "Multi-language fallback for audio and subtitles",
     "owner": "Hightmar",
     "targetAbi": "10.11.0.0",
-    "timestamp": "2026-06-30T19:04:40Z",
-    "version": "1.1.0.2",
+    "timestamp": "2026-09-03T18:37:58Z",
+    "version": "1.2.0.0",
     "status": "Active",
     "autoUpdate": false
 }
