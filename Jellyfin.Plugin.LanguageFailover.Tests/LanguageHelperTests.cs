@@ -297,3 +297,119 @@ public class SelectForcedSubtitleForLanguageTests
         Assert.Null(LanguageHelper.SelectForcedSubtitleForLanguage(streams, "fr", _loc));
     }
 }
+
+public class AudioMakesSubtitlesRedundantTests
+{
+    private readonly FakeLocalizationManager _loc = new();
+
+    [Fact]
+    public void AudioInAnUnwantedLanguageAlwaysLeavesSubtitlesOn()
+    {
+        var streams = new[] { Audio(1, "ja"), Subtitle(2, "fr") };
+        Assert.False(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "fr" }, "ja", _loc));
+    }
+
+    [Fact]
+    public void UnknownAudioLanguageLeavesSubtitlesOn()
+    {
+        var streams = new[] { Subtitle(2, "fr") };
+        Assert.False(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "fr" }, null, _loc));
+    }
+
+    [Fact]
+    public void AudioMatchingTheOnlyAvailableSubtitleLanguageSuppressesSubtitles()
+    {
+        var streams = new[] { Audio(1, "fr"), Subtitle(2, "fr") };
+        Assert.True(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "fr" }, "fr", _loc));
+    }
+
+    [Fact]
+    public void AHigherPrioritySubtitleLanguageBeatsTheAudioLanguage()
+    {
+        // Subtitles ranked [en, fr] with French audio: English subtitles are still
+        // wanted, because English outranks French in the viewer's own list.
+        var streams = new[] { Audio(1, "fr"), Subtitle(2, "en"), Subtitle(3, "fr") };
+        Assert.False(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "en", "fr" }, "fr", _loc));
+    }
+
+    [Fact]
+    public void ALowerPrioritySubtitleLanguageDoesNotBeatTheAudioLanguage()
+    {
+        var streams = new[] { Audio(1, "en"), Subtitle(2, "en"), Subtitle(3, "fr") };
+        Assert.True(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "en", "fr" }, "en", _loc));
+    }
+
+    [Fact]
+    public void TheHigherPriorityLanguageMustActuallyBeAvailable()
+    {
+        // Same [en, fr] ranking and French audio, but no English subtitles exist,
+        // so there is nothing better than repeating the audio.
+        var streams = new[] { Audio(1, "fr"), Subtitle(2, "fr") };
+        Assert.True(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "en", "fr" }, "fr", _loc));
+    }
+
+    [Fact]
+    public void NoSubtitlesAtAllStillCountsAsRedundantWhenTheAudioIsUnderstood()
+    {
+        var streams = new[] { Audio(1, "fr") };
+        Assert.True(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "en", "fr" }, "fr", _loc));
+    }
+
+    [Fact]
+    public void MatchesAcrossIsoCodeFormats()
+    {
+        var streams = new[] { Audio(1, "fra"), Subtitle(2, "fre") };
+        Assert.True(LanguageHelper.AudioMakesSubtitlesRedundant(streams, new[] { "fr" }, "fra", _loc));
+    }
+}
+
+public class PriorityOfTests
+{
+    private readonly FakeLocalizationManager _loc = new();
+
+    [Fact]
+    public void ReturnsTheZeroBasedPosition()
+    {
+        var prefs = new[] { "en", "fr", "ja" };
+        Assert.Equal(0, LanguageHelper.PriorityOf(prefs, "en", _loc));
+        Assert.Equal(1, LanguageHelper.PriorityOf(prefs, "fre", _loc));
+        Assert.Equal(2, LanguageHelper.PriorityOf(prefs, "jpn", _loc));
+    }
+
+    [Fact]
+    public void ReturnsNullForAbsentOrEmptyLanguages()
+    {
+        var prefs = new[] { "en", "fr" };
+        Assert.Null(LanguageHelper.PriorityOf(prefs, "ja", _loc));
+        Assert.Null(LanguageHelper.PriorityOf(prefs, null, _loc));
+        Assert.Null(LanguageHelper.PriorityOf(prefs, string.Empty, _loc));
+    }
+}
+
+public class GetDefaultAudioLanguageTests
+{
+    [Fact]
+    public void PrefersTheStreamFlaggedDefault()
+    {
+        var streams = new[]
+        {
+            Video(0),
+            Audio(1, "en"),
+            new MediaStream { Index = 2, Type = MediaStreamType.Audio, Language = "fr", IsDefault = true },
+        };
+        Assert.Equal("fr", LanguageHelper.GetDefaultAudioLanguage(streams));
+    }
+
+    [Fact]
+    public void FallsBackToTheFirstAudioStream()
+    {
+        var streams = new[] { Video(0), Audio(1, "ja"), Audio(2, "en") };
+        Assert.Equal("ja", LanguageHelper.GetDefaultAudioLanguage(streams));
+    }
+
+    [Fact]
+    public void ReturnsNullWhenTheItemHasNoAudio()
+    {
+        Assert.Null(LanguageHelper.GetDefaultAudioLanguage(new[] { Video(0), Subtitle(1, "fr") }));
+    }
+}

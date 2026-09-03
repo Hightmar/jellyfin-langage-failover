@@ -207,6 +207,118 @@ public static class LanguageHelper
                 : matches[0]);
 
     /// <summary>
+    /// Returns the position of <paramref name="language"/> in the preference list,
+    /// or null if the list does not contain it.
+    /// </summary>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="language">The language code to locate.</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>The zero-based priority, or null.</returns>
+    public static int? PriorityOf(
+        IList<string> preferredLanguages,
+        string? language,
+        ILocalizationManager localizationManager)
+    {
+        if (string.IsNullOrEmpty(language))
+        {
+            return null;
+        }
+
+        for (var i = 0; i < preferredLanguages.Count; i++)
+        {
+            if (LanguageMatches(language, preferredLanguages[i], localizationManager))
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the position of the highest-priority language that actually has a
+    /// subtitle stream available, or null if none of the preferred languages does.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>The zero-based priority of the best available subtitle language, or null.</returns>
+    public static int? BestAvailableSubtitlePriority(
+        IReadOnlyList<MediaStream> streams,
+        IList<string> preferredLanguages,
+        ILocalizationManager localizationManager)
+    {
+        for (var i = 0; i < preferredLanguages.Count; i++)
+        {
+            var lang = preferredLanguages[i];
+            foreach (var stream in streams)
+            {
+                if (stream.Type == MediaStreamType.Subtitle
+                    && LanguageMatches(stream.Language, lang, localizationManager))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Decides whether the selected audio makes subtitles unnecessary.
+    /// <para>
+    /// Subtitles are redundant only when the audio is in a language the user ranks
+    /// at least as highly as the best subtitle language actually available. With
+    /// subtitle preferences [en, fr] and French audio, English subtitles are still
+    /// wanted — English outranks French — so this returns false; if only French
+    /// subtitles exist, it returns true.
+    /// </para>
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="subtitleLanguages">Ordered subtitle language codes.</param>
+    /// <param name="audioLanguage">The language of the selected audio stream.</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>True if subtitles should be suppressed (disabled, or reduced to forced).</returns>
+    public static bool AudioMakesSubtitlesRedundant(
+        IReadOnlyList<MediaStream> streams,
+        IList<string> subtitleLanguages,
+        string? audioLanguage,
+        ILocalizationManager localizationManager)
+    {
+        var audioPriority = PriorityOf(subtitleLanguages, audioLanguage, localizationManager);
+        if (audioPriority is null)
+        {
+            // The audio is in a language the user does not read; they want subtitles.
+            return false;
+        }
+
+        var bestAvailable = BestAvailableSubtitlePriority(streams, subtitleLanguages, localizationManager);
+
+        // Nothing better is on offer, so subtitles would only repeat the audio.
+        return bestAvailable is null || audioPriority <= bestAvailable;
+    }
+
+    /// <summary>
+    /// Returns the language of the audio stream a client plays when the plugin sends
+    /// no selection: the stream flagged default, otherwise the first audio stream.
+    /// Best-effort — the client has the last word — but far better than assuming the
+    /// audio language is unknown.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <returns>The presumed audio language, or null if the item has no audio.</returns>
+    public static string? GetDefaultAudioLanguage(IReadOnlyList<MediaStream> streams)
+    {
+        var audioStreams = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
+        if (audioStreams.Count == 0)
+        {
+            return null;
+        }
+
+        var chosen = audioStreams.FirstOrDefault(s => s.IsDefault) ?? audioStreams[0];
+        return chosen.Language;
+    }
+
+    /// <summary>
     /// Walks the preference list in order and returns the index of the stream chosen by
     /// <paramref name="pickAmongMatches"/> from the first language that has any match.
     /// Language priority always wins: a tie-break never promotes a lower-priority language.

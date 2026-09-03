@@ -120,11 +120,23 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                 return;
             }
 
-            var itemId = eventArgs.Item.Id;
-            var streams = _mediaSourceManager.GetMediaStreams(itemId);
+            // Prefer the media source actually being played: an item with several
+            // versions has one BaseItem per file, and the session may be on a
+            // different one than eventArgs.Item. MediaSourceId is not a Guid for
+            // live streams, in which case the item's own streams are the right ones.
+            var streamOwnerId = Guid.TryParse(eventArgs.MediaSourceId, out var mediaSourceId) && mediaSourceId != Guid.Empty
+                ? mediaSourceId
+                : eventArgs.Item.Id;
+
+            var streams = _mediaSourceManager.GetMediaStreams(streamOwnerId);
+            if (streams.Count == 0 && streamOwnerId != eventArgs.Item.Id)
+            {
+                streams = _mediaSourceManager.GetMediaStreams(eventArgs.Item.Id);
+            }
+
             if (streams.Count == 0)
             {
-                _logger.LogDebug("Language Failover: No streams found for item {ItemId}", itemId);
+                _logger.LogDebug("Language Failover: No streams found for item {ItemId}", eventArgs.Item.Id);
                 return;
             }
 
@@ -201,23 +213,26 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             }
         }
 
-        if (bestAudioIndex is null)
+        if (bestAudioIndex is null && prefs.AudioLanguages.Count > 0)
         {
-            if (prefs.AudioLanguages.Count == 0)
-            {
-                return null;
-            }
-
             bestAudioIndex = LanguageHelper.SelectBestAudioStream(streams, prefs.AudioLanguages, _localizationManager);
         }
 
         if (bestAudioIndex is null)
         {
+            // We are leaving the audio track alone, so report what the client will
+            // most likely play. The subtitle decision depends on the audio language,
+            // and "unknown" would wrongly force subtitles on when the default track
+            // is already in a language the viewer reads.
+            var defaultLang = LanguageHelper.GetDefaultAudioLanguage(streams);
+
             _logger.LogDebug(
-                "Language Failover: No matching audio stream for '{ItemName}' with preferences [{Langs}]",
+                "Language Failover: No audio stream selected for '{ItemName}' with preferences [{Langs}]; assuming the client's default track (lang={Lang})",
                 itemName,
-                string.Join(", ", prefs.AudioLanguages));
-            return null;
+                string.Join(", ", prefs.AudioLanguages),
+                defaultLang ?? "unknown");
+
+            return defaultLang;
         }
 
         var selectedStream = streams.FirstOrDefault(s => s.Index == bestAudioIndex.Value);
@@ -247,49 +262,43 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             return;
         }
 
-        // If audio is already in one of the preferred subtitle languages, either skip subtitles
-        // entirely or switch to forced subtitles (useful for translating foreign dialog).
-        if (!string.IsNullOrEmpty(selectedAudioLang))
+        // If the audio already covers the viewer at least as well as the best subtitle
+        // language on offer, either skip subtitles entirely or fall back to forced ones
+        // (useful for translating foreign dialog).
+        if (LanguageHelper.AudioMakesSubtitlesRedundant(
+                streams, prefs.SubtitleLanguages, selectedAudioLang, _localizationManager))
         {
-            foreach (var subLang in prefs.SubtitleLanguages)
+            if (prefs.PreferForcedWhenAudioMatches)
             {
-                if (!LanguageHelper.LanguageMatches(selectedAudioLang, subLang, _localizationManager))
+                var forcedIdx = LanguageHelper.SelectForcedSubtitleForLanguage(
+                    streams,
+                    selectedAudioLang!,
+                    _localizationManager);
+
+                if (forcedIdx is not null)
                 {
-                    continue;
+                    _logger.LogInformation(
+                        "Language Failover: Audio is in '{Lang}' — selecting forced subtitle stream at index {Index} for '{ItemName}'",
+                        selectedAudioLang,
+                        forcedIdx.Value,
+                        itemName);
+
+                    await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forcedIdx.Value, sessionId)
+                        .ConfigureAwait(false);
+
+                    return;
                 }
-
-                if (prefs.PreferForcedWhenAudioMatches)
-                {
-                    var forcedIdx = LanguageHelper.SelectForcedSubtitleForLanguage(
-                        streams,
-                        subLang,
-                        _localizationManager);
-
-                    if (forcedIdx is not null)
-                    {
-                        _logger.LogInformation(
-                            "Language Failover: Audio is in '{Lang}' — selecting forced subtitle stream at index {Index} for '{ItemName}'",
-                            subLang,
-                            forcedIdx.Value,
-                            itemName);
-
-                        await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forcedIdx.Value, sessionId)
-                            .ConfigureAwait(false);
-
-                        return;
-                    }
-                }
-
-                _logger.LogInformation(
-                    "Language Failover: Audio is already in subtitle language '{Lang}', disabling subtitles for '{ItemName}'",
-                    subLang,
-                    itemName);
-
-                await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId)
-                    .ConfigureAwait(false);
-
-                return;
             }
+
+            _logger.LogInformation(
+                "Language Failover: Audio '{Lang}' outranks every available subtitle language, disabling subtitles for '{ItemName}'",
+                selectedAudioLang,
+                itemName);
+
+            await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId)
+                .ConfigureAwait(false);
+
+            return;
         }
 
         // Audio is NOT in a subtitle language — we want subtitles.
