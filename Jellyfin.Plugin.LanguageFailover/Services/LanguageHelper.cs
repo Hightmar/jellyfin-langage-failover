@@ -9,8 +9,10 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 /// </summary>
 public static class LanguageHelper
 {
+    // "original" alone already covers "original audio/language/version" — the \b after it
+    // matches before the following space, so listing those separately is unreachable.
     private static readonly Regex OriginalVersionRegex = new(
-        @"\b(original|original\s+audio|original\s+language|original\s+version|version\s+originale|v\.?\s*o\.?)\b",
+        @"\b(original|version\s+originale|v\.?\s*o\.?)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ForcedSubtitleRegex = new(

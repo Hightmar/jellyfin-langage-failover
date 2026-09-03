@@ -142,8 +142,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                 SubtitleLanguages = subtitleLangs.ToList(),
                 PreferNonForcedSubtitles = prefs.PreferNonForcedSubtitles,
                 PreferOriginalAudio = prefs.PreferOriginalAudio,
-                PreferForcedWhenAudioMatches = prefs.PreferForcedWhenAudioMatches,
-                Enabled = true
+                PreferForcedWhenAudioMatches = prefs.PreferForcedWhenAudioMatches
             };
 
             var sessionId = eventArgs.Session.Id;

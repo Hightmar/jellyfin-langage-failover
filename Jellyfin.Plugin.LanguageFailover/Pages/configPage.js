@@ -426,8 +426,7 @@ function searchSeries(query) {
         SearchTerm: query,
         IncludeItemTypes: 'Series',
         Recursive: true,
-        Limit: 10,
-        Fields: 'PrimaryImageAspectRatio'
+        Limit: 10
     }).then(function (result) {
         resultsList.innerHTML = '';
         if (!result.Items || result.Items.length === 0) {
