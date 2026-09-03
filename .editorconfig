@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csproj,props,json,yml,yaml,html,js}]
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+# CA1848 wants source-generated LoggerMessage delegates. This plugin logs a
+# handful of lines per playback start; the allocation it saves is not worth
+# trading the call sites' readability for.
+dotnet_diagnostic.CA1848.severity = none
+
+# CA1861 wants constant array arguments hoisted into static readonly fields.
+# In the tests the inline arrays are the test case, and hoisting them would
+# put the data further from the assertion.
+dotnet_diagnostic.CA1861.severity = none

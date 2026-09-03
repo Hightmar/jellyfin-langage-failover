@@ -22,7 +22,7 @@ jobs:
         run: dotnet restore Jellyfin.Plugin.LanguageFailover.sln
 
       - name: Build
-        run: dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-restore
+        run: dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-restore -warnaserror
 
       - name: Test
         run: dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build --verbosity normal

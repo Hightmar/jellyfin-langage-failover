@@ -70,6 +70,7 @@ jobs:
           dotnet build Jellyfin.Plugin.LanguageFailover.sln \
             --configuration Release \
             --no-restore \
+            -warnaserror \
             -p:Version=${{ steps.meta.outputs.version }}
           dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build
 
