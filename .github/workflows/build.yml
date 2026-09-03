@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
@@ -19,7 +19,10 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj
+        run: dotnet restore Jellyfin.Plugin.LanguageFailover.sln
 
       - name: Build
-        run: dotnet build Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj --configuration Release --no-restore
+        run: dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build --verbosity normal
