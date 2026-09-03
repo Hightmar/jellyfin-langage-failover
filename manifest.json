@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.2.0.1",
+        "changelog": "A patch for 1.2.0.0: the language dropdowns on the configuration page were unreadable.\n\n## 🐛 Fixed\n\n- **Dropdown lists were white-on-white.** On a dark Jellyfin theme, opening the user picker or any language selector showed a light popup with white text — every entry invisible except the one under the cursor. The popup is drawn by the browser in its own light/dark scheme, while the text colour was still being taken from the Jellyfin theme; the two are now read as a pair so they can never disagree. The series search results panel had the same latent problem and was fixed with it.\n\n## 🔧 Under the hood\n\n- The release workflow now refuses to publish from a tag with no release note, instead of silently falling back to the last commit message. That fallback is why **1.2.0.0 appears in the catalogue as *\"Merge branch 'develop'\"*** — its real release notes are on the [GitHub releases page](https://github.com/Hightmar/jellyfin-langage-failover/releases).\n\n## ⬆️ Upgrading\n\nStraight upgrade from 1.2.0.0 — no configuration changes. If you are coming from 1.1.x, read the 1.2.0.0 notes first: subtitle selection changed there. Server compatibility is unchanged (**Jellyfin 10.11.x**).",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Hightmar/jellyfin-langage-failover/releases/download/v1.2.0.1/language-failover_1.2.0.1.zip",
+        "checksum": "9a210e89c4cb9ff72fcc4e8968cd645a",
+        "timestamp": "2026-09-03T19:09:18Z"
+      },
+      {
         "version": "1.2.0.0",
         "changelog": "Merge branch 'develop'",
         "targetAbi": "10.11.0.0",
