@@ -1,0 +1,12 @@
+{
+  "name": "language-failover-web-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser-side tests for the plugin's admin configuration page.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3"
+  }
+}

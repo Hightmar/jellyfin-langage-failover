@@ -9,8 +9,10 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 /// </summary>
 public static class LanguageHelper
 {
+    // "original" alone already covers "original audio/language/version" — the \b after it
+    // matches before the following space, so listing those separately is unreachable.
     private static readonly Regex OriginalVersionRegex = new(
-        @"\b(original|original\s+audio|original\s+language|original\s+version|version\s+originale|v\.?\s*o\.?)\b",
+        @"\b(original|version\s+originale|v\.?\s*o\.?)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ForcedSubtitleRegex = new(
@@ -79,47 +81,40 @@ public static class LanguageHelper
             return true;
         }
 
-        // Cross-format match via localization manager
-        var streamCulture = localizationManager.FindLanguageInfo(streamLanguage);
-        if (streamCulture is not null)
-        {
-            if (preferredLanguage.Equals(streamCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
-                || preferredLanguage.Equals(streamCulture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+        // Cross-format match: resolve each side's culture and look for the other side's
+        // code among its known ISO names. Both directions are tried because media may be
+        // tagged in either format and the preference list is stored in either format.
+        return CultureKnowsCode(localizationManager.FindLanguageInfo(streamLanguage), preferredLanguage)
+               || CultureKnowsCode(localizationManager.FindLanguageInfo(preferredLanguage), streamLanguage);
+    }
 
-            if (streamCulture.ThreeLetterISOLanguageNames is not null)
-            {
-                foreach (var code in streamCulture.ThreeLetterISOLanguageNames)
-                {
-                    if (preferredLanguage.Equals(code, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
+    /// <summary>
+    /// Determines whether a resolved culture is known under the given ISO code,
+    /// in either the 2-letter or any of its 3-letter forms.
+    /// </summary>
+    private static bool CultureKnowsCode(CultureDto? culture, string code)
+    {
+        if (culture is null)
+        {
+            return false;
         }
 
-        // Reverse: resolve the preferred language and compare against stream language
-        var prefCulture = localizationManager.FindLanguageInfo(preferredLanguage);
-        if (prefCulture is not null)
+        if (code.Equals(culture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
+            || code.Equals(culture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
         {
-            if (streamLanguage.Equals(prefCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
-                || streamLanguage.Equals(prefCulture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        }
+
+        if (culture.ThreeLetterISOLanguageNames is null)
+        {
+            return false;
+        }
+
+        foreach (var known in culture.ThreeLetterISOLanguageNames)
+        {
+            if (code.Equals(known, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
-            }
-
-            if (prefCulture.ThreeLetterISOLanguageNames is not null)
-            {
-                foreach (var code in prefCulture.ThreeLetterISOLanguageNames)
-                {
-                    if (streamLanguage.Equals(code, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
             }
         }
 
@@ -179,31 +174,13 @@ public static class LanguageHelper
         IReadOnlyList<MediaStream> streams,
         IList<string> preferredLanguages,
         ILocalizationManager localizationManager)
-    {
-        var audioStreams = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
-        if (audioStreams.Count == 0 || preferredLanguages.Count == 0)
-        {
-            return null;
-        }
-
-        foreach (var lang in preferredLanguages)
-        {
-            var matches = audioStreams
-                .Where(s => LanguageMatches(s.Language, lang, localizationManager))
-                .ToList();
-
-            if (matches.Count > 0)
-            {
-                // Prefer highest channel count (e.g., 7.1 > 5.1 > stereo)
-                return matches
-                    .OrderByDescending(s => s.Channels ?? 0)
-                    .First()
-                    .Index;
-            }
-        }
-
-        return null;
-    }
+        => SelectByLanguagePriority(
+            streams,
+            MediaStreamType.Audio,
+            preferredLanguages,
+            localizationManager,
+            // Prefer highest channel count (e.g., 7.1 > 5.1 > stereo)
+            matches => matches.OrderByDescending(s => s.Channels ?? 0).First());
 
     /// <summary>
     /// Selects the best subtitle stream index based on the user's language priority list.
@@ -219,32 +196,161 @@ public static class LanguageHelper
         IList<string> preferredLanguages,
         bool preferNonForced,
         ILocalizationManager localizationManager)
+        => SelectByLanguagePriority(
+            streams,
+            MediaStreamType.Subtitle,
+            preferredLanguages,
+            localizationManager,
+            matches => preferNonForced
+                // Fall back to any match (including forced) if no non-forced is available.
+                ? matches.FirstOrDefault(s => !IsForcedSubtitle(s)) ?? matches[0]
+                : matches[0]);
+
+    /// <summary>
+    /// Returns the position of <paramref name="language"/> in the preference list,
+    /// or null if the list does not contain it.
+    /// </summary>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="language">The language code to locate.</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>The zero-based priority, or null.</returns>
+    public static int? PriorityOf(
+        IList<string> preferredLanguages,
+        string? language,
+        ILocalizationManager localizationManager)
     {
-        var subtitleStreams = streams.Where(s => s.Type == MediaStreamType.Subtitle).ToList();
-        if (subtitleStreams.Count == 0 || preferredLanguages.Count == 0)
+        if (string.IsNullOrEmpty(language))
+        {
+            return null;
+        }
+
+        for (var i = 0; i < preferredLanguages.Count; i++)
+        {
+            if (LanguageMatches(language, preferredLanguages[i], localizationManager))
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the position of the highest-priority language that actually has a
+    /// subtitle stream available, or null if none of the preferred languages does.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>The zero-based priority of the best available subtitle language, or null.</returns>
+    public static int? BestAvailableSubtitlePriority(
+        IReadOnlyList<MediaStream> streams,
+        IList<string> preferredLanguages,
+        ILocalizationManager localizationManager)
+    {
+        for (var i = 0; i < preferredLanguages.Count; i++)
+        {
+            var lang = preferredLanguages[i];
+            foreach (var stream in streams)
+            {
+                if (stream.Type == MediaStreamType.Subtitle
+                    && LanguageMatches(stream.Language, lang, localizationManager))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Decides whether the selected audio makes subtitles unnecessary.
+    /// <para>
+    /// Subtitles are redundant only when the audio is in a language the user ranks
+    /// at least as highly as the best subtitle language actually available. With
+    /// subtitle preferences [en, fr] and French audio, English subtitles are still
+    /// wanted — English outranks French — so this returns false; if only French
+    /// subtitles exist, it returns true.
+    /// </para>
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="subtitleLanguages">Ordered subtitle language codes.</param>
+    /// <param name="audioLanguage">The language of the selected audio stream.</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <returns>True if subtitles should be suppressed (disabled, or reduced to forced).</returns>
+    public static bool AudioMakesSubtitlesRedundant(
+        IReadOnlyList<MediaStream> streams,
+        IList<string> subtitleLanguages,
+        string? audioLanguage,
+        ILocalizationManager localizationManager)
+    {
+        var audioPriority = PriorityOf(subtitleLanguages, audioLanguage, localizationManager);
+        if (audioPriority is null)
+        {
+            // The audio is in a language the user does not read; they want subtitles.
+            return false;
+        }
+
+        var bestAvailable = BestAvailableSubtitlePriority(streams, subtitleLanguages, localizationManager);
+
+        // Nothing better is on offer, so subtitles would only repeat the audio.
+        return bestAvailable is null || audioPriority <= bestAvailable;
+    }
+
+    /// <summary>
+    /// Returns the language of the audio stream a client plays when the plugin sends
+    /// no selection: the stream flagged default, otherwise the first audio stream.
+    /// Best-effort — the client has the last word — but far better than assuming the
+    /// audio language is unknown.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <returns>The presumed audio language, or null if the item has no audio.</returns>
+    public static string? GetDefaultAudioLanguage(IReadOnlyList<MediaStream> streams)
+    {
+        var audioStreams = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
+        if (audioStreams.Count == 0)
+        {
+            return null;
+        }
+
+        var chosen = audioStreams.FirstOrDefault(s => s.IsDefault) ?? audioStreams[0];
+        return chosen.Language;
+    }
+
+    /// <summary>
+    /// Walks the preference list in order and returns the index of the stream chosen by
+    /// <paramref name="pickAmongMatches"/> from the first language that has any match.
+    /// Language priority always wins: a tie-break never promotes a lower-priority language.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="type">The stream type to consider.</param>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <param name="pickAmongMatches">Tie-break applied to the non-empty matches of one language.</param>
+    /// <returns>The selected stream index, or null if no language matched.</returns>
+    private static int? SelectByLanguagePriority(
+        IReadOnlyList<MediaStream> streams,
+        MediaStreamType type,
+        IList<string> preferredLanguages,
+        ILocalizationManager localizationManager,
+        Func<List<MediaStream>, MediaStream> pickAmongMatches)
+    {
+        var candidates = streams.Where(s => s.Type == type).ToList();
+        if (candidates.Count == 0 || preferredLanguages.Count == 0)
         {
             return null;
         }
 
         foreach (var lang in preferredLanguages)
         {
-            var matches = subtitleStreams
+            var matches = candidates
                 .Where(s => LanguageMatches(s.Language, lang, localizationManager))
                 .ToList();
 
             if (matches.Count > 0)
             {
-                if (preferNonForced)
-                {
-                    var nonForced = matches.Where(s => !IsForcedSubtitle(s)).ToList();
-                    if (nonForced.Count > 0)
-                    {
-                        return nonForced.First().Index;
-                    }
-                }
-
-                // Fall back to any match (including forced) if no non-forced available
-                return matches.First().Index;
+                return pickAmongMatches(matches).Index;
             }
         }
 

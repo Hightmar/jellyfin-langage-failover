@@ -15,7 +15,7 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 
 - **Ordered language priorities** — Define a ranked list of preferred languages for audio and subtitles (e.g., Audio: Chinese > Korean > Japanese > English > French). The first available match wins. Reorder by drag-and-drop or with the up/down arrows.
 - **Prefer original audio (VO)** — Optional toggle that picks the track tagged as "Original" / "VO" / "Version Originale" over the priority list. Useful when watching a foreign film in its original language regardless of dubs available.
-- **Smart subtitle behavior** — Subtitles are automatically enabled only when the audio is not in your subtitle language. If you set subtitles to French and the audio is already French, subtitles are disabled.
+- **Smart subtitle behavior** — Subtitles are enabled only when they would add something. If the selected audio is in a language you rank at least as highly as the best subtitle track available, subtitles are turned off. With subtitles ranked *English > French* and French audio, English subtitles are still selected — English is your first choice, so it wins; if the file has no English subtitles, subtitles are turned off instead.
 - **Forced subtitles when audio matches your language** — Optional toggle: instead of disabling subtitles when audio is already in your language, keep forced subtitles on to translate foreign dialog or signage.
 - **Forced subtitle fallback** — Prefers complete (non-forced) subtitles, but falls back to forced subtitles when they're the only option available. Forced tracks are recognised from both the container forced flag **and** the track title (e.g. *Forced*, *Forcé*, *Forzado*), so a forced track stays correctly classified even when the media file leaves the forced flag unset — while titles such as *Non-Forced* are never misread as forced.
 - **Per-series overrides** — Override language preferences for specific series. For example, keep your global preferences but force a specific anime to always play with its original audio.
@@ -30,7 +30,7 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 3. If the item is a TV episode, it checks for series-specific overrides
 4. It analyzes all available audio/subtitle streams on the media file
 5. **Audio selection**: if "Prefer original audio" is on and a track is tagged as Original/VO, it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
-6. **Subtitle selection**: if the selected audio is in one of your subtitle languages, subtitles are either disabled or switched to forced (when "Show forced subtitles when audio matches" is on); otherwise the best subtitle track in your priority order is selected
+6. **Subtitle selection**: the audio language is compared against your subtitle priority list. If the audio ranks at least as highly as the best subtitle language actually present on the file, subtitles are disabled — or switched to forced, when "Show forced subtitles when audio matches" is on. Otherwise the best subtitle track in your priority order is selected
 7. It sends `SetAudioStreamIndex` / `SetSubtitleStreamIndex` commands to the client
 
 > **Forced vs. complete detection.** Many files do not set the container's forced disposition flag and only mark forced tracks in the stream title. The plugin therefore treats a subtitle as *forced* when either the forced flag is set or the title (or composed display title) contains a forced keyword (`forced`, `forcé/forcée/forcés`, `forzado`, `forzato`, `erzwungen`), while explicitly ignoring negations like *non-forced* / *non forcé*. A track that is genuinely forced but carries neither the flag nor any keyword cannot be distinguished — fix its metadata at the source (e.g. `mkvpropedit --edit track:sN --set flag-forced=1`).
@@ -71,10 +71,17 @@ Future updates will appear automatically in the catalog.
 ```bash
 git clone https://github.com/Hightmar/jellyfin-langage-failover.git
 cd jellyfin-langage-failover
-dotnet build Jellyfin.Plugin.LanguageFailover --configuration Release
+dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release
+dotnet test  Jellyfin.Plugin.LanguageFailover.sln --configuration Release
 ```
 
 Copy `bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll` and `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin directory, then restart Jellyfin.
+
+The browser-side tests for the admin page live in `web-tests/` and run separately:
+
+```bash
+cd web-tests && npm ci && npm test
+```
 
 ## Configuration
 
@@ -85,7 +92,7 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 1. **Select a user** from the dropdown
 2. **Enable/disable** Language Failover for that user
 3. **Audio Language Priority** — Add languages and reorder them by drag-and-drop (or with the up/down arrows). The first available match in the media file wins. Among streams of the same language, surround sound (5.1/7.1) is preferred over stereo.
-4. **Subtitle Language Priority** — Same principle. Subtitles are only activated if the selected audio is not already in one of the subtitle languages.
+4. **Subtitle Language Priority** — Same principle. Subtitles are only activated when they beat the audio: if the audio language ranks at least as highly in this list as the best subtitle track the file actually has, subtitles stay off.
 5. **Prefer non-forced subtitles** — When checked, complete subtitles are preferred over forced (signs/songs only) subtitles. If only forced subtitles are available, they will still be selected as a fallback. Forced tracks are detected from the container flag as well as the track title, so this works even when the file's forced flag is missing.
 6. **Prefer original audio (VO)** — When checked, a track tagged as Original / VO / Version Originale beats the priority list. Falls back to the priority list if no track is tagged.
 7. **Show forced subtitles when audio matches your language** — When checked, instead of disabling subtitles in the case where audio already matches one of your subtitle languages, the plugin selects a forced subtitle track in that language if one exists. Useful for translating foreign dialog or on-screen text in an otherwise native-language film.

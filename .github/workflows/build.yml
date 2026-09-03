@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
@@ -19,7 +19,30 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj
+        run: dotnet restore Jellyfin.Plugin.LanguageFailover.sln
 
       - name: Build
-        run: dotnet build Jellyfin.Plugin.LanguageFailover/Jellyfin.Plugin.LanguageFailover.csproj --configuration Release --no-restore
+        run: dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build --verbosity normal
+
+  web-tests:
+    name: Config page tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        run: npm ci
+        working-directory: web-tests
+
+      - name: Test
+        run: npm test
+        working-directory: web-tests

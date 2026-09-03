@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Referenced directly: the plugin marks them PrivateAssets=all, so they are not transitive. -->
+    <PackageReference Include="Jellyfin.Controller" />
+    <PackageReference Include="Jellyfin.Model" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Jellyfin.Plugin.LanguageFailover\Jellyfin.Plugin.LanguageFailover.csproj" />
+  </ItemGroup>
+
+</Project>

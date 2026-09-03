@@ -2,7 +2,36 @@
      class="page type-interior pluginConfigurationPage"
      data-controller="Language Failover.js">
     <style>
-        .lf-page { max-width: 960px; margin: 0 auto; padding-bottom: 6em; }
+        /* Themeable surface tokens.
+           Jellyfin ships light and dark themes, so nothing here may assume one
+           or the other. Text is currentColor at varying opacity, which inherits
+           whatever the active theme set; surfaces and borders are neutral grey
+           overlays, which read the same way over a light or a dark background.
+           Only the accent colour comes from the theme, with Jellyfin's default
+           blue as the fallback. */
+        .lf-page {
+            --lf-accent: var(--theme-primary-color, #00a4dc);
+            --lf-surface: rgba(128,128,128,0.10);
+            --lf-surface-hover: rgba(128,128,128,0.18);
+            --lf-border: rgba(128,128,128,0.30);
+            --lf-border-soft: rgba(128,128,128,0.18);
+            --lf-danger: #e5534b;
+
+            max-width: 960px;
+            margin: 0 auto;
+            padding-bottom: 6em;
+        }
+
+        /* Native controls follow the browser's light/dark rendering so their
+           dropdown popups stay legible instead of being forced to one scheme. */
+        .lf-page select,
+        .lf-page input[type="text"],
+        .lf-page input[type="checkbox"] {
+            color-scheme: light dark;
+        }
+
+        .lf-muted { opacity: 0.7; }
+
         .lf-header { margin-bottom: 1.5em; }
         .lf-header h1 {
             margin: 0 0 0.3em 0;
@@ -12,13 +41,13 @@
         }
         .lf-header p {
             margin: 0;
-            color: #aaa;
+            opacity: 0.7;
             font-size: 0.95em;
         }
 
         .lf-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border-soft);
             border-radius: 8px;
             padding: 1.5em;
             margin-bottom: 1.2em;
@@ -32,7 +61,7 @@
             gap: 0.5em;
         }
         .lf-card-subtitle {
-            color: #999;
+            opacity: 0.7;
             font-size: 0.85em;
             margin: 0 0 1em 0;
         }
@@ -44,10 +73,9 @@
             font-size: 0.95em;
             font-weight: 500;
             margin: 0 0 0.3em 0;
-            color: #ddd;
         }
         .lf-subsection-hint {
-            color: #888;
+            opacity: 0.65;
             font-size: 0.8em;
             margin: 0 0 0.8em 0;
         }
@@ -66,22 +94,22 @@
             align-items: center;
             gap: 0.6em;
             padding: 0.5em 0.7em;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border-soft);
             border-radius: 6px;
             transition: background 0.15s ease, transform 0.1s ease;
             cursor: grab;
             user-select: none;
         }
-        .lf-chip:hover { background: rgba(255,255,255,0.08); }
+        .lf-chip:hover { background: var(--lf-surface-hover); }
         .lf-chip:active { cursor: grabbing; }
         .lf-chip.lf-dragging { opacity: 0.4; }
         .lf-chip.lf-drag-over {
-            border-color: var(--theme-primary-color, #00a4dc);
-            background: rgba(0,164,220,0.08);
+            border-color: var(--lf-accent);
+            background: color-mix(in srgb, var(--lf-accent) 12%, transparent);
         }
         .lf-drag-handle {
-            color: #666;
+            opacity: 0.5;
             font-size: 1em;
             line-height: 1;
             padding: 0 0.1em;
@@ -95,19 +123,20 @@
             min-width: 1.6em;
             height: 1.6em;
             padding: 0 0.4em;
-            background: var(--theme-primary-color, #00a4dc);
+            background: var(--lf-accent);
             color: #fff;
             border-radius: 50%;
             font-size: 0.8em;
             font-weight: 600;
         }
         .lf-chip-name { flex: 1; font-size: 0.95em; }
-        .lf-chip-code { color: #888; font-size: 0.8em; margin-left: 0.3em; }
+        .lf-chip-code { opacity: 0.6; font-size: 0.8em; margin-left: 0.3em; }
         .lf-chip-actions { display: flex; gap: 0.2em; }
         .lf-icon-btn {
             background: transparent;
             border: none;
-            color: #bbb;
+            color: inherit;
+            opacity: 0.75;
             cursor: pointer;
             width: 1.9em;
             height: 1.9em;
@@ -116,20 +145,23 @@
             align-items: center;
             justify-content: center;
             font-size: 1em;
-            transition: background 0.15s ease, color 0.15s ease;
+            transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
             padding: 0;
         }
-        .lf-icon-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #fff; }
+        .lf-icon-btn:hover:not(:disabled) { background: var(--lf-surface-hover); opacity: 1; }
         .lf-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        .lf-icon-btn.lf-danger:hover:not(:disabled) { background: rgba(244,67,54,0.18); color: #ff6b6b; }
+        .lf-icon-btn.lf-danger:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--lf-danger) 18%, transparent);
+            color: var(--lf-danger);
+        }
 
         .lf-empty {
             padding: 1em;
             text-align: center;
-            color: #777;
+            opacity: 0.6;
             font-style: italic;
             font-size: 0.85em;
-            border: 1px dashed rgba(255,255,255,0.1);
+            border: 1px dashed var(--lf-border-soft);
             border-radius: 6px;
             margin-bottom: 0.8em;
         }
@@ -143,26 +175,25 @@
             flex: 1;
             min-width: 0;
             padding: 0.5em 0.6em;
-            background: #fff;
-            border: 1px solid rgba(255,255,255,0.12);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border);
             border-radius: 4px;
-            color: #111;
+            color: inherit;
             font-size: 0.9em;
         }
         .lf-add-row button {
             padding: 0 1em;
-            background: var(--theme-primary-color, #00a4dc);
+            background: var(--lf-accent);
             color: #fff;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 0.9em;
             font-weight: 500;
-            transition: background 0.15s ease;
+            transition: filter 0.15s ease;
             white-space: nowrap;
         }
         .lf-add-row button:hover { filter: brightness(1.1); }
-        .lf-add-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .lf-toggle-row {
             display: flex;
@@ -175,18 +206,18 @@
             width: 1.1em;
             height: 1.1em;
             cursor: pointer;
-            accent-color: var(--theme-primary-color, #00a4dc);
+            accent-color: var(--lf-accent);
         }
         .lf-toggle-label { font-size: 0.95em; }
-        .lf-toggle-hint { color: #888; font-size: 0.8em; display: block; margin-top: 0.1em; }
+        .lf-toggle-hint { opacity: 0.65; font-size: 0.8em; display: block; margin-top: 0.1em; }
 
         .lf-user-select {
             width: 100%;
             padding: 0.6em 0.7em;
-            background: #fff;
-            border: 1px solid rgba(255,255,255,0.12);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border);
             border-radius: 4px;
-            color: #111;
+            color: inherit;
             font-size: 0.95em;
         }
 
@@ -194,10 +225,10 @@
         .lf-search-input {
             width: 100%;
             padding: 0.6em 0.7em 0.6em 2.2em;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border);
             border-radius: 4px;
-            color: #eee;
+            color: inherit;
             font-size: 0.95em;
             box-sizing: border-box;
         }
@@ -206,7 +237,7 @@
             left: 0.7em;
             top: 50%;
             transform: translateY(-50%);
-            color: #888;
+            opacity: 0.6;
             pointer-events: none;
             font-size: 1em;
         }
@@ -214,13 +245,17 @@
             list-style: none;
             padding: 0.3em 0;
             margin: 0.3em 0 0 0;
-            border: 1px solid rgba(255,255,255,0.15);
+            border: 1px solid var(--lf-border);
             border-radius: 6px;
-            background: #1c1c1c;
+            /* Opaque so the results are not read through the page behind them.
+               Falls back to the browser's canvas colour, which follows the
+               light/dark scheme set above. */
+            background: var(--theme-body-background-color, Canvas);
+            color: inherit;
             max-height: 240px;
             overflow-y: auto;
             display: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
         }
         .lf-search-results li {
             padding: 0.6em 0.8em;
@@ -228,17 +263,17 @@
             font-size: 0.9em;
             transition: background 0.1s ease;
         }
-        .lf-search-results li:hover { background: rgba(255,255,255,0.08); }
+        .lf-search-results li:hover { background: var(--lf-surface-hover); }
         .lf-search-results li.lf-no-results {
-            color: #888;
+            opacity: 0.65;
             cursor: default;
             font-style: italic;
         }
         .lf-search-results li.lf-no-results:hover { background: transparent; }
 
         .lf-series-override {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: var(--lf-surface);
+            border: 1px solid var(--lf-border-soft);
             border-radius: 6px;
             padding: 1em;
             margin-bottom: 0.8em;
@@ -249,7 +284,7 @@
             gap: 0.5em;
             margin-bottom: 0.8em;
             padding-bottom: 0.6em;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid var(--lf-border-soft);
         }
         .lf-series-override-title {
             flex: 1;
@@ -267,14 +302,14 @@
         }
         .lf-save-btn {
             padding: 0.7em 2em;
-            background: var(--theme-primary-color, #00a4dc);
+            background: var(--lf-accent);
             color: #fff;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 0.95em;
             font-weight: 500;
-            transition: background 0.15s ease;
+            transition: filter 0.15s ease;
         }
         .lf-save-btn:hover { filter: brightness(1.1); }
 
@@ -285,15 +320,13 @@
             display: none;
         }
         .lf-status.lf-status-success {
-            background: rgba(76,175,80,0.15);
-            color: #a5d6a7;
-            border: 1px solid rgba(76,175,80,0.3);
+            background: color-mix(in srgb, #4caf50 18%, transparent);
+            border: 1px solid color-mix(in srgb, #4caf50 45%, transparent);
             display: inline-block;
         }
         .lf-status.lf-status-error {
-            background: rgba(244,67,54,0.15);
-            color: #ef9a9a;
-            border: 1px solid rgba(244,67,54,0.3);
+            background: color-mix(in srgb, var(--lf-danger) 18%, transparent);
+            border: 1px solid color-mix(in srgb, var(--lf-danger) 45%, transparent);
             display: inline-block;
         }
     </style>
@@ -325,8 +358,8 @@
                         <p class="lf-subsection-hint">Ordered from most to least preferred. Surround tracks win ties.</p>
                         <ul id="audioLangList" class="lf-chips"></ul>
                         <div class="lf-add-row">
-                            <select id="audioLangSelect"></select>
-                            <button id="btnAddAudio" type="button">+ Add</button>
+                            <select></select>
+                            <button class="btnAddLang" type="button">+ Add</button>
                         </div>
                     </div>
 
@@ -335,8 +368,8 @@
                         <p class="lf-subsection-hint">Ordered from most to least preferred.</p>
                         <ul id="subtitleLangList" class="lf-chips"></ul>
                         <div class="lf-add-row">
-                            <select id="subtitleLangSelect"></select>
-                            <button id="btnAddSubtitle" type="button">+ Add</button>
+                            <select></select>
+                            <button class="btnAddLang" type="button">+ Add</button>
                         </div>
                     </div>
                 </div>
