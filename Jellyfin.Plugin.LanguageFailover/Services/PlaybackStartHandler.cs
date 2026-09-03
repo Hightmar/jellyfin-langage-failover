@@ -14,7 +14,7 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 /// <summary>
 /// Handles playback start events to enforce per-user language preferences.
 /// </summary>
-public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
+public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 {
     /// <summary>
     /// How long to wait after PlaybackStart before touching the client's track selection.
@@ -107,11 +107,13 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                         subtitleLangs = seriesOverride.SubtitleLanguages;
                     }
 
-                    _logger.LogInformation(
-                        "Language Failover: Using series override for '{SeriesName}' — Audio=[{Audio}], Subtitle=[{Sub}]",
-                        seriesOverride.SeriesName,
-                        string.Join(", ", audioLangs),
-                        string.Join(", ", subtitleLangs));
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        LogSeriesOverride(
+                            seriesOverride.SeriesName,
+                            string.Join(", ", audioLangs),
+                            string.Join(", ", subtitleLangs));
+                    }
                 }
             }
 
@@ -136,16 +138,18 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 
             if (streams.Count == 0)
             {
-                _logger.LogDebug("Language Failover: No streams found for item {ItemId}", eventArgs.Item.Id);
+                LogNoStreams(eventArgs.Item.Id);
                 return;
             }
 
-            _logger.LogDebug(
-                "Language Failover: Processing '{ItemName}' for user {UserKey} — Audio=[{Audio}], Subtitle=[{Sub}]",
-                eventArgs.Item.Name,
-                userKey,
-                string.Join(", ", audioLangs),
-                string.Join(", ", subtitleLangs));
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                LogProcessing(
+                    eventArgs.Item.Name,
+                    userKey,
+                    string.Join(", ", audioLangs),
+                    string.Join(", ", subtitleLangs));
+            }
 
             // Build an effective prefs object with potentially overridden languages
             var effectivePrefs = new UserLanguagePreference
@@ -171,7 +175,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Language Failover: Error processing playback start event");
+            LogUnhandledError(ex);
         }
     }
 
@@ -206,10 +210,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             bestAudioIndex = LanguageHelper.SelectOriginalAudioStream(streams);
             if (bestAudioIndex is not null)
             {
-                _logger.LogInformation(
-                    "Language Failover: Selected original-version audio stream at index {Index} for '{ItemName}'",
-                    bestAudioIndex.Value,
-                    itemName);
+                LogSelectedOriginalAudio(bestAudioIndex.Value, itemName);
             }
         }
 
@@ -226,11 +227,10 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             // is already in a language the viewer reads.
             var defaultLang = LanguageHelper.GetDefaultAudioLanguage(streams);
 
-            _logger.LogDebug(
-                "Language Failover: No audio stream selected for '{ItemName}' with preferences [{Langs}]; assuming the client's default track (lang={Lang})",
-                itemName,
-                string.Join(", ", prefs.AudioLanguages),
-                defaultLang ?? "unknown");
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                LogNoAudioSelected(itemName, string.Join(", ", prefs.AudioLanguages), defaultLang ?? "unknown");
+            }
 
             return defaultLang;
         }
@@ -238,11 +238,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
         var selectedStream = streams.FirstOrDefault(s => s.Index == bestAudioIndex.Value);
         var selectedLang = selectedStream?.Language;
 
-        _logger.LogInformation(
-            "Language Failover: Setting audio stream to index {Index} (lang={Lang}) for '{ItemName}'",
-            bestAudioIndex.Value,
-            selectedLang ?? "unknown",
-            itemName);
+        LogSettingAudio(bestAudioIndex.Value, selectedLang ?? "unknown", itemName);
 
         await SendStreamIndexCommand(GeneralCommandType.SetAudioStreamIndex, bestAudioIndex.Value, sessionId)
             .ConfigureAwait(false);
@@ -277,11 +273,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 
                 if (forcedIdx is not null)
                 {
-                    _logger.LogInformation(
-                        "Language Failover: Audio is in '{Lang}' — selecting forced subtitle stream at index {Index} for '{ItemName}'",
-                        selectedAudioLang,
-                        forcedIdx.Value,
-                        itemName);
+                    LogSelectingForcedSubtitle(selectedAudioLang, forcedIdx.Value, itemName);
 
                     await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forcedIdx.Value, sessionId)
                         .ConfigureAwait(false);
@@ -290,10 +282,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                 }
             }
 
-            _logger.LogInformation(
-                "Language Failover: Audio '{Lang}' outranks every available subtitle language, disabling subtitles for '{ItemName}'",
-                selectedAudioLang,
-                itemName);
+            LogDisablingSubtitles(selectedAudioLang, itemName);
 
             await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId)
                 .ConfigureAwait(false);
@@ -311,17 +300,14 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 
         if (bestSubIndex is null)
         {
-            _logger.LogDebug(
-                "Language Failover: No matching subtitle stream for '{ItemName}' with preferences [{Langs}]",
-                itemName,
-                string.Join(", ", prefs.SubtitleLanguages));
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                LogNoSubtitleMatch(itemName, string.Join(", ", prefs.SubtitleLanguages));
+            }
             return;
         }
 
-        _logger.LogInformation(
-            "Language Failover: Setting subtitle stream to index {Index} for '{ItemName}'",
-            bestSubIndex.Value,
-            itemName);
+        LogSettingSubtitle(bestSubIndex.Value, itemName);
 
         await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, bestSubIndex.Value, sessionId)
             .ConfigureAwait(false);

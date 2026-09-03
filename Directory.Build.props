@@ -11,4 +11,14 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The analyzer set comes from this package, not from whatever SDK happens to be
+         installed. CI builds with -warnaserror, so an SDK upgrade on the runner must not
+         be able to introduce a new rule and break the build on its own. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
 </Project>

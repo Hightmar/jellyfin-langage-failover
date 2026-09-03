@@ -136,8 +136,20 @@ cd web-tests && npm ci && npm test
 
 Shared MSBuild properties live in `Directory.Build.props`; package versions are central in
 `Directory.Packages.props`, so bumping Jellyfin is a one-line edit there (plus `targetAbi` in
-`meta.json`). `.editorconfig` carries the analyzer settings — CA1848 and CA1861 are off, each
-with its reason — and CI builds with `-warnaserror`, so keep the tree warning-clean.
+`meta.json`). CI builds with `-warnaserror`, so keep the tree warning-clean.
+
+**The analyzer set is a pinned NuGet package** (`Microsoft.CodeAnalysis.NetAnalyzers` in
+`Directory.Packages.props`), not whatever the installed SDK ships, and `global.json` pins the
+SDK feature band. This is deliberate: with `-warnaserror`, an SDK upgrade on the GitHub runner
+would otherwise be able to introduce a new rule and break the build with no code change — which
+is exactly what happened once, when the runner had CA1873 and the local SDK did not. Bump the
+analyzer package on purpose, see what it finds, then commit.
+
+All logging goes through source-generated `[LoggerMessage]` methods in
+`Services/PlaybackStartHandler.Logging.cs`, which is what keeps CA1848 satisfied rather than
+suppressed. Add new messages there; do not call `_logger.LogX(...)` directly. Call sites that
+have to build a string (`string.Join` over a preference list) guard themselves with
+`_logger.IsEnabled(...)`.
 
 Output DLL: `Jellyfin.Plugin.LanguageFailover/bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll`
 Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin folder and restart Jellyfin.

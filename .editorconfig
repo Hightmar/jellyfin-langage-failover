@@ -14,12 +14,19 @@ indent_size = 4
 indent_size = 2
 
 [*.cs]
-# CA1848 wants source-generated LoggerMessage delegates. This plugin logs a
-# handful of lines per playback start; the allocation it saves is not worth
-# trading the call sites' readability for.
-dotnet_diagnostic.CA1848.severity = none
-
 # CA1861 wants constant array arguments hoisted into static readonly fields.
 # In the tests the inline arrays are the test case, and hoisting them would
 # put the data further from the assertion.
 dotnet_diagnostic.CA1861.severity = none
+
+
+# CA1873 flags argument evaluation that would be wasted when logging is off. The
+# remaining hits are string.Join calls that already sit inside an
+# `if (_logger.IsEnabled(...))` block — the rule does not model that guard, so they
+# are false positives. Note this is not a licence to log carelessly: CA1848 stays
+# ON and is satisfied (all logging goes through source-generated LoggerMessage
+# methods in PlaybackStartHandler.Logging.cs), so a new unguarded ILogger call is
+# still caught.
+# Enabled at all only because some SDKs turn it on and CI builds with -warnaserror;
+# it is off by default in the pinned analyzer package.
+dotnet_diagnostic.CA1873.severity = none
