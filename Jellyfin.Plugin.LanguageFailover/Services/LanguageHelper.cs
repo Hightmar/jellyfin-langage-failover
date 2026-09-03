@@ -79,47 +79,40 @@ public static class LanguageHelper
             return true;
         }
 
-        // Cross-format match via localization manager
-        var streamCulture = localizationManager.FindLanguageInfo(streamLanguage);
-        if (streamCulture is not null)
-        {
-            if (preferredLanguage.Equals(streamCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
-                || preferredLanguage.Equals(streamCulture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+        // Cross-format match: resolve each side's culture and look for the other side's
+        // code among its known ISO names. Both directions are tried because media may be
+        // tagged in either format and the preference list is stored in either format.
+        return CultureKnowsCode(localizationManager.FindLanguageInfo(streamLanguage), preferredLanguage)
+               || CultureKnowsCode(localizationManager.FindLanguageInfo(preferredLanguage), streamLanguage);
+    }
 
-            if (streamCulture.ThreeLetterISOLanguageNames is not null)
-            {
-                foreach (var code in streamCulture.ThreeLetterISOLanguageNames)
-                {
-                    if (preferredLanguage.Equals(code, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-            }
+    /// <summary>
+    /// Determines whether a resolved culture is known under the given ISO code,
+    /// in either the 2-letter or any of its 3-letter forms.
+    /// </summary>
+    private static bool CultureKnowsCode(CultureDto? culture, string code)
+    {
+        if (culture is null)
+        {
+            return false;
         }
 
-        // Reverse: resolve the preferred language and compare against stream language
-        var prefCulture = localizationManager.FindLanguageInfo(preferredLanguage);
-        if (prefCulture is not null)
+        if (code.Equals(culture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
+            || code.Equals(culture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
         {
-            if (streamLanguage.Equals(prefCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase)
-                || streamLanguage.Equals(prefCulture.ThreeLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        }
+
+        if (culture.ThreeLetterISOLanguageNames is null)
+        {
+            return false;
+        }
+
+        foreach (var known in culture.ThreeLetterISOLanguageNames)
+        {
+            if (code.Equals(known, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
-            }
-
-            if (prefCulture.ThreeLetterISOLanguageNames is not null)
-            {
-                foreach (var code in prefCulture.ThreeLetterISOLanguageNames)
-                {
-                    if (streamLanguage.Equals(code, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
             }
         }
 
@@ -179,31 +172,13 @@ public static class LanguageHelper
         IReadOnlyList<MediaStream> streams,
         IList<string> preferredLanguages,
         ILocalizationManager localizationManager)
-    {
-        var audioStreams = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
-        if (audioStreams.Count == 0 || preferredLanguages.Count == 0)
-        {
-            return null;
-        }
-
-        foreach (var lang in preferredLanguages)
-        {
-            var matches = audioStreams
-                .Where(s => LanguageMatches(s.Language, lang, localizationManager))
-                .ToList();
-
-            if (matches.Count > 0)
-            {
-                // Prefer highest channel count (e.g., 7.1 > 5.1 > stereo)
-                return matches
-                    .OrderByDescending(s => s.Channels ?? 0)
-                    .First()
-                    .Index;
-            }
-        }
-
-        return null;
-    }
+        => SelectByLanguagePriority(
+            streams,
+            MediaStreamType.Audio,
+            preferredLanguages,
+            localizationManager,
+            // Prefer highest channel count (e.g., 7.1 > 5.1 > stereo)
+            matches => matches.OrderByDescending(s => s.Channels ?? 0).First());
 
     /// <summary>
     /// Selects the best subtitle stream index based on the user's language priority list.
@@ -219,32 +194,49 @@ public static class LanguageHelper
         IList<string> preferredLanguages,
         bool preferNonForced,
         ILocalizationManager localizationManager)
+        => SelectByLanguagePriority(
+            streams,
+            MediaStreamType.Subtitle,
+            preferredLanguages,
+            localizationManager,
+            matches => preferNonForced
+                // Fall back to any match (including forced) if no non-forced is available.
+                ? matches.FirstOrDefault(s => !IsForcedSubtitle(s)) ?? matches[0]
+                : matches[0]);
+
+    /// <summary>
+    /// Walks the preference list in order and returns the index of the stream chosen by
+    /// <paramref name="pickAmongMatches"/> from the first language that has any match.
+    /// Language priority always wins: a tie-break never promotes a lower-priority language.
+    /// </summary>
+    /// <param name="streams">All media streams for the item.</param>
+    /// <param name="type">The stream type to consider.</param>
+    /// <param name="preferredLanguages">Ordered language codes (index 0 = highest priority).</param>
+    /// <param name="localizationManager">The localization manager.</param>
+    /// <param name="pickAmongMatches">Tie-break applied to the non-empty matches of one language.</param>
+    /// <returns>The selected stream index, or null if no language matched.</returns>
+    private static int? SelectByLanguagePriority(
+        IReadOnlyList<MediaStream> streams,
+        MediaStreamType type,
+        IList<string> preferredLanguages,
+        ILocalizationManager localizationManager,
+        Func<List<MediaStream>, MediaStream> pickAmongMatches)
     {
-        var subtitleStreams = streams.Where(s => s.Type == MediaStreamType.Subtitle).ToList();
-        if (subtitleStreams.Count == 0 || preferredLanguages.Count == 0)
+        var candidates = streams.Where(s => s.Type == type).ToList();
+        if (candidates.Count == 0 || preferredLanguages.Count == 0)
         {
             return null;
         }
 
         foreach (var lang in preferredLanguages)
         {
-            var matches = subtitleStreams
+            var matches = candidates
                 .Where(s => LanguageMatches(s.Language, lang, localizationManager))
                 .ToList();
 
             if (matches.Count > 0)
             {
-                if (preferNonForced)
-                {
-                    var nonForced = matches.Where(s => !IsForcedSubtitle(s)).ToList();
-                    if (nonForced.Count > 0)
-                    {
-                        return nonForced.First().Index;
-                    }
-                }
-
-                // Fall back to any match (including forced) if no non-forced available
-                return matches.First().Index;
+                return pickAmongMatches(matches).Index;
             }
         }
 

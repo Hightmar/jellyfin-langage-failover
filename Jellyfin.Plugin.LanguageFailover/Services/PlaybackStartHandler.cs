@@ -1,8 +1,10 @@
+using System.Globalization;
 using Jellyfin.Plugin.LanguageFailover.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
@@ -14,6 +16,25 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 /// </summary>
 public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 {
+    /// <summary>
+    /// How long to wait after PlaybackStart before touching the client's track selection.
+    /// Some clients (notably TV apps) are not done initialising their player when the event
+    /// fires and silently revert commands that arrive too early. Do not lower without
+    /// testing on a real TV client.
+    /// </summary>
+    private static readonly TimeSpan PlayerInitDelay = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>
+    /// How long to wait between the audio and subtitle commands, so the client has finished
+    /// applying the audio switch before the subtitle one arrives.
+    /// </summary>
+    private static readonly TimeSpan BetweenCommandsDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// The stream index Jellyfin clients interpret as "no subtitle track".
+    /// </summary>
+    private const int SubtitlesDisabledIndex = -1;
+
     private readonly ISessionManager _sessionManager;
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly ILocalizationManager _localizationManager;
@@ -127,14 +148,12 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 
             var sessionId = eventArgs.Session.Id;
 
-            // Wait for the client player to be fully initialized before sending commands
-            await Task.Delay(1500).ConfigureAwait(false);
+            await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
 
             // Audio stream selection — returns the language of the selected audio stream
             var selectedAudioLang = await TrySetAudioStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name).ConfigureAwait(false);
 
-            // Small delay to let the client process the audio change before sending subtitle command
-            await Task.Delay(500).ConfigureAwait(false);
+            await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
 
             // Subtitle stream selection — uses audio language to decide behavior
             await TrySetSubtitleStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name, selectedAudioLang).ConfigureAwait(false);
@@ -146,10 +165,24 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
     }
 
     /// <summary>
+    /// Sends a track-selection command to the client. Index -1 disables the track.
+    /// </summary>
+    private Task SendStreamIndexCommand(GeneralCommandType commandType, int index, string sessionId)
+    {
+        var command = new GeneralCommand
+        {
+            Name = commandType,
+            Arguments = { ["Index"] = index.ToString(CultureInfo.InvariantCulture) }
+        };
+
+        return _sessionManager.SendGeneralCommand(string.Empty, sessionId, command, CancellationToken.None);
+    }
+
+    /// <summary>
     /// Returns the language code of the selected audio stream, or null.
     /// </summary>
     private async Task<string?> TrySetAudioStream(
-        IReadOnlyList<MediaBrowser.Model.Entities.MediaStream> streams,
+        IReadOnlyList<MediaStream> streams,
         UserLanguagePreference prefs,
         string sessionId,
         string? itemName)
@@ -197,23 +230,14 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             selectedLang ?? "unknown",
             itemName);
 
-        var command = new GeneralCommand
-        {
-            Name = GeneralCommandType.SetAudioStreamIndex,
-            Arguments = { ["Index"] = bestAudioIndex.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) }
-        };
-
-        await _sessionManager.SendGeneralCommand(
-            string.Empty,
-            sessionId,
-            command,
-            CancellationToken.None).ConfigureAwait(false);
+        await SendStreamIndexCommand(GeneralCommandType.SetAudioStreamIndex, bestAudioIndex.Value, sessionId)
+            .ConfigureAwait(false);
 
         return selectedLang;
     }
 
     private async Task TrySetSubtitleStream(
-        IReadOnlyList<MediaBrowser.Model.Entities.MediaStream> streams,
+        IReadOnlyList<MediaStream> streams,
         UserLanguagePreference prefs,
         string sessionId,
         string? itemName,
@@ -250,17 +274,8 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                             forcedIdx.Value,
                             itemName);
 
-                        var forcedCmd = new GeneralCommand
-                        {
-                            Name = GeneralCommandType.SetSubtitleStreamIndex,
-                            Arguments = { ["Index"] = forcedIdx.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) }
-                        };
-
-                        await _sessionManager.SendGeneralCommand(
-                            string.Empty,
-                            sessionId,
-                            forcedCmd,
-                            CancellationToken.None).ConfigureAwait(false);
+                        await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forcedIdx.Value, sessionId)
+                            .ConfigureAwait(false);
 
                         return;
                     }
@@ -271,17 +286,8 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
                     subLang,
                     itemName);
 
-                var disableCmd = new GeneralCommand
-                {
-                    Name = GeneralCommandType.SetSubtitleStreamIndex,
-                    Arguments = { ["Index"] = "-1" }
-                };
-
-                await _sessionManager.SendGeneralCommand(
-                    string.Empty,
-                    sessionId,
-                    disableCmd,
-                    CancellationToken.None).ConfigureAwait(false);
+                await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId)
+                    .ConfigureAwait(false);
 
                 return;
             }
@@ -309,16 +315,7 @@ public class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
             bestSubIndex.Value,
             itemName);
 
-        var command = new GeneralCommand
-        {
-            Name = GeneralCommandType.SetSubtitleStreamIndex,
-            Arguments = { ["Index"] = bestSubIndex.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) }
-        };
-
-        await _sessionManager.SendGeneralCommand(
-            string.Empty,
-            sessionId,
-            command,
-            CancellationToken.None).ConfigureAwait(false);
+        await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, bestSubIndex.Value, sessionId)
+            .ConfigureAwait(false);
     }
 }
