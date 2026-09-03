@@ -30,6 +30,16 @@
             color-scheme: light dark;
         }
 
+        /* The closed control is styled to match the page, but the popup is drawn by
+           the browser using the scheme above. Its text must therefore come from the
+           same place as its background — the Field/FieldText system pair — and not
+           from the page's inherited colour, or a dark theme's white text lands on a
+           light popup and the list is invisible. */
+        .lf-page select option {
+            background-color: Field;
+            color: FieldText;
+        }
+
         .lf-muted { opacity: 0.7; }
 
         .lf-header { margin-bottom: 1.5em; }
@@ -247,11 +257,13 @@
             margin: 0.3em 0 0 0;
             border: 1px solid var(--lf-border);
             border-radius: 6px;
-            /* Opaque so the results are not read through the page behind them.
-               Falls back to the browser's canvas colour, which follows the
-               light/dark scheme set above. */
-            background: var(--theme-body-background-color, Canvas);
-            color: inherit;
+            /* Opaque, so the results are not read through the page behind them.
+               Background and text are taken as a pair from the Canvas/CanvasText
+               system colours rather than mixing a themed background with inherited
+               text: the two must agree, and only the pair is guaranteed to. */
+            color-scheme: light dark;
+            background: Canvas;
+            color: CanvasText;
             max-height: 240px;
             overflow-y: auto;
             display: none;
