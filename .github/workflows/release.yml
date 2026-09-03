@@ -38,12 +38,27 @@ jobs:
         run: |
           VERSION="${TAG#v}"
 
-          # The annotated tag message is the release note. Fall back to the tagged
-          # commit's message only for a lightweight tag, which has none.
+          # Make sure the tag *object* is local, not just the commit it points at.
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+
+          # The release note is the annotated tag's message. A lightweight tag has no
+          # message of its own, and `git tag --format='%(contents)'` silently falls
+          # through to the tagged commit's message for one — which is how "Merge branch
+          # 'develop'" reached the plugin catalogue. Refuse to publish instead: the
+          # changelog is user-facing and must be written on purpose.
+          if [ "$(git cat-file -t "$TAG")" != "tag" ]; then
+            echo "::error::Tag ${TAG} is lightweight, so it carries no release note."
+            echo "Re-create it as an annotated tag, then push it again:"
+            echo "    git tag -d ${TAG} && git push origin :refs/tags/${TAG}"
+            echo "    git tag -a ${TAG} -F release-notes.md"
+            echo "    git push origin ${TAG}"
+            exit 1
+          fi
+
           CHANGELOG="$(git tag -l --format='%(contents)' "$TAG")"
           if [ -z "$(printf '%s' "$CHANGELOG" | tr -d '[:space:]')" ]; then
-            echo "Tag $TAG has no annotation; falling back to the commit message."
-            CHANGELOG="$(git log -1 --pretty=%B "$TAG")"
+            echo "::error::Tag ${TAG} is annotated but its message is empty."
+            exit 1
           fi
 
           {
