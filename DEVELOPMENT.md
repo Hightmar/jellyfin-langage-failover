@@ -161,15 +161,19 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
   avoid losing content on merge.)
 - Releases are automated by GitHub Actions on a tag push:
   ```bash
-  git tag v1.1.0.3 -m "Release 1.1.0.3
-
-  What changed, in the words you want published."
+  git tag -a v1.1.0.3 -F release-notes.md --cleanup=verbatim
   git push origin v1.1.0.3
   ```
-  **The annotated tag message becomes the release changelog** — in the GitHub release, in
+  The tag **must be annotated** (`-a`/`-F`): the release job refuses a lightweight tag
+  rather than fall back to the commit message. GitKraken and similar GUIs often create
+  lightweight tags — check with `git cat-file -t <tag>`, which must print `tag`.
+  Note the `--cleanup=verbatim`: without it `git tag` strips every line starting with
+  `#`, which silently eats Markdown headings from the release note.
+
+  **The tag message becomes the release changelog** — in the GitHub release, in
   `manifest.json`, and in `meta.json`. Write it for users. (Earlier releases used the tagged
   commit's message, which is why the manifest history contains entries like
-  "Merge branch 'develop'".) A lightweight tag falls back to the commit message.
+  "Merge branch 'develop'"; 1.2.0.0 is the last one affected.)
 - The workflow builds, runs both test suites, packages `language-failover_<version>.zip`, creates
   the GitHub Release, and updates `manifest.json` + `meta.json` on `main`.
 - **Don't hand-edit `manifest.json`.** `scripts/update_manifest.py` writes it, reading the plugin's
