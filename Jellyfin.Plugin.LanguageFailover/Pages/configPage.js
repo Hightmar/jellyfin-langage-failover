@@ -242,6 +242,10 @@ function renderSeriesOverrides(overrides) {
         var div = document.createElement('div');
         div.className = 'lf-series-override';
         div.dataset.index = ovIndex;
+        // The block carries its own identity so reading the UI back never has to
+        // assume the DOM order still lines up with the saved configuration array.
+        div.dataset.seriesId = ov.SeriesId || '';
+        div.dataset.seriesName = ov.SeriesName || '';
 
         var audioListId = 'soAudio_' + ovIndex;
         var subListId = 'soSub_' + ovIndex;
@@ -251,12 +255,12 @@ function renderSeriesOverrides(overrides) {
         div.innerHTML =
             '<div class="lf-series-override-header">' +
                 '<span class="lf-series-override-title">' + escapeHtml(ov.SeriesName || ov.SeriesId) + '</span>' +
-                '<button class="lf-icon-btn lf-danger btnRemoveOverride" title="Remove override" data-ov-index="' + ovIndex + '">&times;</button>' +
+                '<button class="lf-icon-btn lf-danger btnRemoveOverride" title="Remove override">&times;</button>' +
             '</div>' +
             '<div class="lf-row">' +
                 '<div class="lf-col">' +
                     '<div class="lf-subsection-title">Audio</div>' +
-                    '<ul id="' + audioListId + '" class="lf-chips"></ul>' +
+                    '<ul id="' + audioListId + '" class="lf-chips" data-ov-role="audio"></ul>' +
                     '<div class="lf-add-row">' +
                         '<select id="' + audioSelId + '"></select>' +
                         '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="audio">+ Add</button>' +
@@ -264,7 +268,7 @@ function renderSeriesOverrides(overrides) {
                 '</div>' +
                 '<div class="lf-col">' +
                     '<div class="lf-subsection-title">Subtitles</div>' +
-                    '<ul id="' + subListId + '" class="lf-chips"></ul>' +
+                    '<ul id="' + subListId + '" class="lf-chips" data-ov-role="subtitle"></ul>' +
                     '<div class="lf-add-row">' +
                         '<select id="' + subSelId + '"></select>' +
                         '<button class="btnAddOvLang" data-ov-index="' + ovIndex + '" data-ov-type="subtitle">+ Add</button>' +
@@ -345,17 +349,13 @@ function getSeriesOverridesFromUI() {
     var overrides = [];
     var container = currentView.querySelector('#seriesOverridesList');
     var blocks = container.querySelectorAll('.lf-series-override');
-    blocks.forEach(function (block, idx) {
-        var nameEl = block.querySelector('.lf-series-override-title');
-        var audioList = block.querySelector('#soAudio_' + idx);
-        var subList = block.querySelector('#soSub_' + idx);
-
-        var prefs = getOrCreateUserPrefs(currentUserId);
-        var existingOv = (prefs.SeriesOverrides || [])[idx];
+    blocks.forEach(function (block) {
+        var audioList = block.querySelector('[data-ov-role="audio"]');
+        var subList = block.querySelector('[data-ov-role="subtitle"]');
 
         overrides.push({
-            SeriesId: existingOv ? existingOv.SeriesId : '',
-            SeriesName: nameEl ? nameEl.textContent : '',
+            SeriesId: block.dataset.seriesId || '',
+            SeriesName: block.dataset.seriesName || '',
             AudioLanguages: audioList ? getCodesFromList(audioList) : [],
             SubtitleLanguages: subList ? getCodesFromList(subList) : []
         });
@@ -451,6 +451,14 @@ function searchSeries(query) {
             });
         }
         resultsList.style.display = 'block';
+    }).catch(function (err) {
+        console.error('Language Failover series search error:', err);
+        resultsList.innerHTML = '';
+        var li = document.createElement('li');
+        li.className = 'lf-no-results';
+        li.textContent = 'Search failed. Check the server logs.';
+        resultsList.appendChild(li);
+        resultsList.style.display = 'block';
     });
 }
 
@@ -475,13 +483,16 @@ function addSeriesOverride(seriesId, seriesName) {
     renderSeriesOverrides(prefs.SeriesOverrides);
 }
 
-function removeSeriesOverride(ovIndex) {
+function removeSeriesOverride(seriesId) {
     var prefs = getCurrentPrefs();
-    if (prefs.SeriesOverrides && prefs.SeriesOverrides[ovIndex] !== undefined) {
-        prefs.SeriesOverrides.splice(ovIndex, 1);
-        saveUserPrefsToConfig(currentUserId, prefs);
-        renderSeriesOverrides(prefs.SeriesOverrides);
-    }
+    if (!prefs.SeriesOverrides) return;
+
+    var idx = prefs.SeriesOverrides.findIndex(function (o) { return o.SeriesId === seriesId; });
+    if (idx < 0) return;
+
+    prefs.SeriesOverrides.splice(idx, 1);
+    saveUserPrefsToConfig(currentUserId, prefs);
+    renderSeriesOverrides(prefs.SeriesOverrides);
 }
 
 function showStatus(msg, isError) {
@@ -555,7 +566,8 @@ export default function (view) {
         if (!btn) return;
 
         if (btn.classList.contains('btnRemoveOverride')) {
-            removeSeriesOverride(parseInt(btn.dataset.ovIndex, 10));
+            var block = btn.closest('.lf-series-override');
+            if (block) removeSeriesOverride(block.dataset.seriesId);
             return;
         }
 
@@ -594,8 +606,10 @@ export default function (view) {
             view.querySelector('#seriesSearchResults').style.display = 'block';
         }
     });
-    document.addEventListener('click', function (e) {
-        if (!view.contains(e.target)) return;
+    // Bound to the view, not to document: Jellyfin re-runs this controller on every
+    // navigation to the page, and a document-level listener would never be removed.
+    // The old handler already ignored clicks outside the view, so this is equivalent.
+    view.addEventListener('click', function (e) {
         if (!e.target.closest('.lf-search-wrapper')) {
             var results = view.querySelector('#seriesSearchResults');
             if (results) results.style.display = 'none';
