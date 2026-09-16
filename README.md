@@ -4,7 +4,7 @@
 [![Release](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/release.yml/badge.svg)](https://github.com/Hightmar/jellyfin-langage-failover/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/Hightmar/jellyfin-langage-failover?color=blue)](https://github.com/Hightmar/jellyfin-langage-failover/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Hightmar/jellyfin-langage-failover/total?color=green)](https://github.com/Hightmar/jellyfin-langage-failover/releases)
-[![Jellyfin](https://img.shields.io/badge/jellyfin-10.11.x-purple)](https://jellyfin.org)
+[![Jellyfin](https://img.shields.io/badge/jellyfin-12.x-purple)](https://jellyfin.org)
 [![License](https://img.shields.io/github/license/Hightmar/jellyfin-langage-failover)](LICENSE)
 
 A Jellyfin plugin that provides per-user audio and subtitle language selection with priority-based fallback and per-series overrides.
@@ -75,7 +75,7 @@ dotnet build Jellyfin.Plugin.LanguageFailover.sln --configuration Release
 dotnet test  Jellyfin.Plugin.LanguageFailover.sln --configuration Release
 ```
 
-Copy `bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll` and `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin directory, then restart Jellyfin.
+Copy `bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll` and `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin directory, then restart Jellyfin.
 
 The browser-side tests for the admin page live in `web-tests/` and run separately:
 
@@ -117,8 +117,18 @@ The plugin uses ISO 639 language matching with cross-format support (ISO 639-1 t
 
 ## Requirements
 
-- Jellyfin Server **10.11.x**
-- .NET 9.0 SDK (for building from source only)
+- Jellyfin Server **12.x**
+- .NET 10.0 SDK (for building from source only)
+
+### Still on Jellyfin 10.11?
+
+Stay on plugin version **1.2.0.1**. Jellyfin 12.0 moved the server to .NET 10 and
+broke the plugin ABI, so 1.3.0.0 and later cannot load on a 10.11 server.
+
+Nothing is required of you: the catalogue filters versions by `targetAbi`, so a 10.11
+server never sees 1.3.0.0 and will not offer or install it. An existing 1.2.0.1
+installation keeps working untouched. The 10.11 line is no longer maintained — it
+receives no further fixes, and upgrading the server is the way to get new ones.
 
 ## Troubleshooting
 

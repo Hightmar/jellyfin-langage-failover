@@ -29,7 +29,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Read version and changelog from the tag
         id: meta
@@ -95,7 +95,7 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           mkdir -p release
-          cp Jellyfin.Plugin.LanguageFailover/bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll release/
+          cp Jellyfin.Plugin.LanguageFailover/bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll release/
           cp Jellyfin.Plugin.LanguageFailover/meta.json release/
           cd release
           ZIP_NAME="language-failover_${VERSION}.zip"

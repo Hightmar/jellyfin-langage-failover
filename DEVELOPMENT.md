@@ -135,8 +135,11 @@ cd web-tests && npm ci && npm test
 ```
 
 Shared MSBuild properties live in `Directory.Build.props`; package versions are central in
-`Directory.Packages.props`, so bumping Jellyfin is a one-line edit there (plus `targetAbi` in
-`meta.json`). CI builds with `-warnaserror`, so keep the tree warning-clean.
+`Directory.Packages.props`, so bumping Jellyfin within a release line is a one-line edit there
+(plus `targetAbi` in `meta.json`). A major server release moves more: 12.0 took Jellyfin to
+.NET 10, so `TargetFramework` in `Directory.Build.props`, the SDK band in `global.json`, the
+`dotnet-version` in both workflows and the `net10.0` path in the release workflow's packaging
+step all move with it. CI builds with `-warnaserror`, so keep the tree warning-clean.
 
 **The analyzer set is a pinned NuGet package** (`Microsoft.CodeAnalysis.NetAnalyzers` in
 `Directory.Packages.props`), not whatever the installed SDK ships, and `global.json` pins the
@@ -151,7 +154,7 @@ suppressed. Add new messages there; do not call `_logger.LogX(...)` directly. Ca
 have to build a string (`string.Join` over a preference list) guard themselves with
 `_logger.IsEnabled(...)`.
 
-Output DLL: `Jellyfin.Plugin.LanguageFailover/bin/Release/net9.0/Jellyfin.Plugin.LanguageFailover.dll`
+Output DLL: `Jellyfin.Plugin.LanguageFailover/bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll`
 Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin folder and restart Jellyfin.
 
 ## Branch & release workflow

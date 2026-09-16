@@ -46,6 +46,10 @@ public sealed class FakeLocalizationManager : ILocalizationManager
 
     public string GetLocalizedString(string phrase, string culture) => throw new NotSupportedException();
 
+    public string GetServerLocalizedString(string phrase) => throw new NotSupportedException();
+
+    public string? GetLanguageDisplayName(string language) => throw new NotSupportedException();
+
     public IEnumerable<LocalizationOption> GetLocalizationOptions() => throw new NotSupportedException();
 
     public bool TryGetISO6392TFromB(string isoB, [NotNullWhen(true)] out string? isoT) => throw new NotSupportedException();

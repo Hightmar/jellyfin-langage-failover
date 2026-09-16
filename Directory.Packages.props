@@ -1,24 +1,26 @@
 <Project>
 
-  <!-- Single source of truth for package versions. Bumping Jellyfin here is the
-       only edit needed to target a new server ABI (meta.json targetAbi aside). -->
+  <!-- Single source of truth for package versions. Within a release line, bumping
+       Jellyfin here is the only edit needed to target a new server ABI (meta.json
+       targetAbi aside). A major server release also moves the TargetFramework in
+       Directory.Build.props and the SDK band in global.json — see DEVELOPMENT.md. -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Jellyfin.Controller" Version="10.11.8" />
-    <PackageVersion Include="Jellyfin.Model" Version="10.11.8" />
+    <PackageVersion Include="Jellyfin.Controller" Version="12.0.0" />
+    <PackageVersion Include="Jellyfin.Model" Version="12.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Build-time only">
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.400" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401" />
   </ItemGroup>
 
   <ItemGroup Label="Test only">
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageVersion Include="xunit" Version="2.9.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 
 </Project>

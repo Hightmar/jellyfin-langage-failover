@@ -79,19 +79,69 @@ public class PluginIdentityTests
     }
 
     [Fact]
-    public void ManifestVersionsCarryTheMetaTargetAbi()
+    public void ManifestTargetAbisStayBehindTheBuild()
+    {
+        // The manifest outlives a server generation: 1.2.0.1 keeps serving Jellyfin
+        // 10.11 long after meta.json moved to the 12.x ABI. So entries may declare an
+        // older ABI than meta.json — but never a newer one, which would mean the
+        // catalogue is promising a build that does not exist yet.
+        var metaAbi = Version.Parse(MetaTargetAbi);
+
+        foreach (var (version, abi) in ManifestVersions())
+        {
+            Assert.True(
+                abi <= metaAbi,
+                $"manifest entry {version} declares targetAbi {abi}, ahead of meta.json's {metaAbi}.");
+        }
+    }
+
+    [Fact]
+    public void NewerVersionsNeverDeclareAnOlderAbi()
+    {
+        // Jellyfin filters the catalogue with `targetAbi <= serverVersion`, not equality,
+        // so a 12.x server sees the 10.11 entries too and simply takes the highest version
+        // number of everything it can see. The moment an old-ABI entry outranks a new-ABI
+        // one, that server installs the build that cannot load on it.
+        var entries = ManifestVersions();
+
+        foreach (var older in entries)
+        {
+            foreach (var newer in entries)
+            {
+                if (older.Abi < newer.Abi)
+                {
+                    Assert.True(
+                        older.Version < newer.Version,
+                        $"{older.Version} (ABI {older.Abi}) outranks {newer.Version} (ABI {newer.Abi}); "
+                        + "a server on the newer ABI would install the older build.");
+                }
+            }
+        }
+    }
+
+    private static string MetaTargetAbi
+    {
+        get
+        {
+            using var meta = JsonDocument.Parse(File.ReadAllText(MetaJsonPath));
+            return meta.RootElement.GetProperty("targetAbi").GetString()!;
+        }
+    }
+
+    private static List<(Version Version, Version Abi)> ManifestVersions()
     {
         using var meta = JsonDocument.Parse(File.ReadAllText(MetaJsonPath));
         using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "manifest.json")));
 
-        var targetAbi = meta.RootElement.GetProperty("targetAbi").GetString();
         var guid = meta.RootElement.GetProperty("guid").GetString();
-
         var plugin = manifest.RootElement.EnumerateArray().First(p => p.GetProperty("guid").GetString() == guid);
-        foreach (var version in plugin.GetProperty("versions").EnumerateArray())
-        {
-            Assert.Equal(targetAbi, version.GetProperty("targetAbi").GetString());
-        }
+
+        // Materialised before the JsonDocument is disposed.
+        return plugin.GetProperty("versions").EnumerateArray()
+            .Select(v => (
+                Version.Parse(v.GetProperty("version").GetString()!),
+                Version.Parse(v.GetProperty("targetAbi").GetString()!)))
+            .ToList();
     }
 
     private static string FindRepoRoot()
