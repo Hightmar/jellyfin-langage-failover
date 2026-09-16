@@ -5,7 +5,7 @@
 [![Latest release](https://img.shields.io/github/v/release/Hightmar/jellyfin-langage-failover?color=blue)](https://github.com/Hightmar/jellyfin-langage-failover/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Hightmar/jellyfin-langage-failover/total?color=green)](https://github.com/Hightmar/jellyfin-langage-failover/releases)
 [![Jellyfin](https://img.shields.io/badge/jellyfin-10.11.x-purple?logo=jellyfin)](https://jellyfin.org)
-[![Jellyfin](https://img.shields.io/badge/jellyfin-12.x-orangeOn?logo=jellyfin)](https://jellyfin.org)
+[![Jellyfin](https://img.shields.io/badge/jellyfin-12.x-orange?logo=jellyfin)](https://jellyfin.org)
 [![License](https://img.shields.io/github/license/Hightmar/jellyfin-langage-failover)](LICENSE)
 
 A Jellyfin plugin that provides per-user audio and subtitle language selection with priority-based fallback and per-series overrides.
