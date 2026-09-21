@@ -58,6 +58,49 @@ public class IsForcedSubtitleTests
         // The container flag is authoritative: a "non-forced" title cannot un-force it.
         Assert.True(LanguageHelper.IsForcedSubtitle(Subtitle(0, "fr", isForced: true, title: "Non-Forced")));
     }
+
+    [Theory]
+    [InlineData("Signs & Songs")]
+    [InlineData("Signs and Songs")]
+    [InlineData("S&S")]
+    [InlineData("S & S")]
+    [InlineData("S+S")]
+    [InlineData("SnS")]
+    [InlineData("Signs/Songs")]
+    [InlineData("Signs / Songs")]
+    [InlineData("Songs & Signs")]
+    [InlineData("Songs and Signs")]
+    [InlineData("English [S&S]")]
+    [InlineData("ENG - Signs & Songs [Commie]")]
+    public void SignsAndSongsTitleIsDetected(string title)
+    {
+        // Anime releases name their forced-equivalent track this way and rarely set the
+        // container flag on it.
+        Assert.True(LanguageHelper.IsForcedSubtitle(Subtitle(0, "en", title: title)));
+    }
+
+    [Theory]
+    [InlineData("Full Subtitles (Signs & Songs)")]
+    [InlineData("Dialogue + Signs & Songs")]
+    [InlineData("Dialogs / Signs and Songs")]
+    [InlineData("Complete [S&S included]")]
+    public void CompleteTrackMentioningSignsIsNotForced(string title)
+    {
+        Assert.False(LanguageHelper.IsForcedSubtitle(Subtitle(0, "en", title: title)));
+    }
+
+    [Theory]
+    [InlineData("Designs")]
+    [InlineData("Signed")]
+    [InlineData("Songbird")]
+    [InlineData("Designs & Songs")]
+    [InlineData("SS")]
+    [InlineData("Bass&Snare")]
+    [InlineData("SS&S")]
+    public void WordsContainingSignsKeywordsAreNotForced(string title)
+    {
+        Assert.False(LanguageHelper.IsForcedSubtitle(Subtitle(0, "en", title: title)));
+    }
 }
 
 public class LanguageMatchesTests
@@ -251,6 +294,15 @@ public class SelectBestSubtitleStreamTests
     }
 
     [Fact]
+    public void SkipsSignsAndSongsTrackForTheFullOne()
+    {
+        // Japanese audio, English subtitles wanted: the S&S track comes first on many
+        // releases and must not be mistaken for the complete one.
+        var streams = new[] { Subtitle(1, "en", title: "Signs & Songs"), Subtitle(2, "en", title: "Full Subtitles") };
+        Assert.Equal(2, LanguageHelper.SelectBestSubtitleStream(streams, new[] { "en" }, true, _loc));
+    }
+
+    [Fact]
     public void HigherPriorityLanguageWinsOverForcedPreference()
     {
         var streams = new[] { Subtitle(1, "en", isForced: true), Subtitle(2, "fr") };
@@ -288,6 +340,23 @@ public class SelectForcedSubtitleForLanguageTests
     {
         var streams = new[] { Subtitle(1, "fra", title: "Forcés") };
         Assert.Equal(1, LanguageHelper.SelectForcedSubtitleForLanguage(streams, "fr", _loc));
+    }
+
+    [Fact]
+    public void FindsSignsAndSongsTrackForAnEnglishDub()
+    {
+        // English dub over Japanese on-screen text: the S&S track is the one to show.
+        var streams = new[] { Subtitle(1, "eng", title: "Full Subtitles"), Subtitle(2, "eng", title: "S&S") };
+        Assert.Equal(2, LanguageHelper.SelectForcedSubtitleForLanguage(streams, "en", _loc));
+    }
+
+    [Fact]
+    public void FindsSignsAndSongsTrackInAnyLanguage()
+    {
+        // The keywords are read from the title, not tied to English: a French S&S track
+        // serves a French dub the same way.
+        var streams = new[] { Subtitle(1, "eng", title: "S&S"), Subtitle(2, "fre", title: "Complets"), Subtitle(3, "fre", title: "Signs & Songs") };
+        Assert.Equal(3, LanguageHelper.SelectForcedSubtitleForLanguage(streams, "fr", _loc));
     }
 
     [Fact]
