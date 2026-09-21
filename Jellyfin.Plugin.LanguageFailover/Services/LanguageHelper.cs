@@ -24,10 +24,25 @@ public static class LanguageHelper
         @"\b(?:non|not)[\s-]?forc",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Anime releases label their forced-equivalent track "Signs & Songs" rather than
+    // "Forced", and rarely set the container flag on it: S&S, S+S, SnS, Signs & Songs,
+    // Signs and Songs, Signs/Songs, or the same the other way round. The lookarounds stand
+    // in for \b, which cannot bracket "&"; they keep "S&S" from matching inside a longer word.
+    private static readonly Regex SignsAndSongsRegex = new(
+        @"(?<![\p{L}\p{N}])(?:s\s*[&+n]\s*s|signs\s*(?:&|and|/)\s*songs|songs\s*(?:&|and|/)\s*signs)(?![\p{L}\p{N}])",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Fansub groups name their complete track "Full + Signs" or "Dialogue + Signs & Songs":
+    // those carry every line of dialog, so a signs keyword alongside them is not forced.
+    private static readonly Regex CompleteTrackRegex = new(
+        @"\b(?:full|dialogues?|dialogs?|complete)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// Determines whether a subtitle stream is "forced".
     /// Many media files do not set the container forced disposition flag and instead
-    /// indicate it only in the stream title (e.g. "Forced", "Forcé"), so this checks both
+    /// indicate it only in the stream title (e.g. "Forced", "Forcé", or the anime
+    /// "Signs &amp; Songs" / "S&amp;S"), so this checks both
     /// the <see cref="MediaStream.IsForced"/> flag and forced keywords in the stream title
     /// and the composed display title.
     /// </summary>
@@ -57,7 +72,12 @@ public static class LanguageHelper
             return false;
         }
 
-        return ForcedSubtitleRegex.IsMatch(title);
+        if (ForcedSubtitleRegex.IsMatch(title))
+        {
+            return true;
+        }
+
+        return SignsAndSongsRegex.IsMatch(title) && !CompleteTrackRegex.IsMatch(title);
     }
 
     /// <summary>
