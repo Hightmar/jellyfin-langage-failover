@@ -6,6 +6,7 @@
     "overview": "Multi-language fallback for audio and subtitles",
     "owner": "Hightmar",
     "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/Hightmar/jellyfin-langage-failover/main/images/jellyfin_langage_failover_cover.jpg",
     "versions": [
       {
         "version": "1.3.0.0",

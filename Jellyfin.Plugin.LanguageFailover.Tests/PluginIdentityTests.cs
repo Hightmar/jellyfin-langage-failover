@@ -68,6 +68,25 @@ public class PluginIdentityTests
     }
 
     [Fact]
+    public void PluginImageExistsAndManifestPointsAtIt()
+    {
+        // meta.json names the file the release zip ships beside the DLL ("My Plugins");
+        // manifest.json points the catalogue at the same file on main. Both are read
+        // from images/, so a rename that misses one of them fails here, not in the UI.
+        using var meta = JsonDocument.Parse(File.ReadAllText(MetaJsonPath));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "manifest.json")));
+
+        var imagePath = meta.RootElement.GetProperty("imagePath").GetString()!;
+        Assert.True(
+            File.Exists(Path.Combine(RepoRoot, "images", imagePath)),
+            $"meta.json declares imagePath {imagePath}, but images/{imagePath} does not exist.");
+
+        var guid = meta.RootElement.GetProperty("guid").GetString();
+        var plugin = manifest.RootElement.EnumerateArray().First(p => p.GetProperty("guid").GetString() == guid);
+        Assert.EndsWith($"/main/images/{imagePath}", plugin.GetProperty("imageUrl").GetString());
+    }
+
+    [Fact]
     public void MetaJsonCarriesFourSegmentVersions()
     {
         // Jellyfin rejects anything else; scripts/set_meta_version.py enforces the

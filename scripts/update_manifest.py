@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Add (or replace) a version entry in the repository plugin manifest.
 
-The plugin's identity — guid, name, description, overview, category, owner and
+The plugin's identity — guid, name, description, overview, category, owner, image and
 targetAbi — is read from meta.json rather than restated here, so meta.json stays
 the single source of truth and the manifest cannot drift away from the DLL that
 ships beside it.
@@ -17,6 +17,8 @@ Environment:
     TIMESTAMP     required, ISO-8601 UTC
     META_PATH     optional, defaults to the plugin's meta.json
     MANIFEST_PATH optional, defaults to manifest.json
+    GITHUB_REPOSITORY optional, owner/name the catalogue image is served from;
+                  set by GitHub Actions, defaults to the upstream repository
 """
 
 import json
@@ -25,6 +27,8 @@ import sys
 
 DEFAULT_META_PATH = "Jellyfin.Plugin.LanguageFailover/meta.json"
 DEFAULT_MANIFEST_PATH = "manifest.json"
+DEFAULT_REPOSITORY = "Hightmar/jellyfin-langage-failover"
+IMAGE_DIR = "images"
 
 
 def main() -> int:
@@ -54,6 +58,14 @@ def main() -> int:
     plugin["overview"] = meta["overview"]
     plugin["category"] = meta["category"]
     plugin["owner"] = meta["owner"]
+
+    # The catalogue wants a URL; meta.json only names the file shipped in the zip.
+    # Both point at the same file under images/ on main.
+    if "imagePath" in meta:
+        repository = os.environ.get("GITHUB_REPOSITORY", DEFAULT_REPOSITORY)
+        plugin["imageUrl"] = (
+            f"https://raw.githubusercontent.com/{repository}/main/{IMAGE_DIR}/{meta['imagePath']}"
+        )
 
     entry = {
         "version": version,

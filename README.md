@@ -65,6 +65,7 @@ Future updates will appear automatically in the catalog.
 3. The folder should contain:
    - `Jellyfin.Plugin.LanguageFailover.dll`
    - `meta.json`
+   - `jellyfin_langage_failover_cover.jpg` (optional — the plugin's image in *My Plugins*)
 4. Restart Jellyfin
 
 ### From Source

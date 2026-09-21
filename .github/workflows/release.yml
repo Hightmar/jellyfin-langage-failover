@@ -97,9 +97,13 @@ jobs:
           mkdir -p release
           cp Jellyfin.Plugin.LanguageFailover/bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll release/
           cp Jellyfin.Plugin.LanguageFailover/meta.json release/
+          # meta.json's imagePath is resolved against the plugin folder, so the image
+          # ships beside it; that is what "My Plugins" shows once installed.
+          IMAGE="$(jq -r '.imagePath' Jellyfin.Plugin.LanguageFailover/meta.json)"
+          cp "images/${IMAGE}" release/
           cd release
           ZIP_NAME="language-failover_${VERSION}.zip"
-          zip "$ZIP_NAME" Jellyfin.Plugin.LanguageFailover.dll meta.json
+          zip "$ZIP_NAME" Jellyfin.Plugin.LanguageFailover.dll meta.json "$IMAGE"
           CHECKSUM=$(md5sum "$ZIP_NAME" | awk '{print $1}')
           {
             echo "zip_name=$ZIP_NAME"

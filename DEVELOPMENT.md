@@ -180,7 +180,7 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
 - The workflow builds, runs both test suites, packages `language-failover_<version>.zip`, creates
   the GitHub Release, and updates `manifest.json` + `meta.json` on `main`.
 - **Don't hand-edit `manifest.json`.** `scripts/update_manifest.py` writes it, reading the plugin's
-  identity (guid, name, description, overview, category, owner, targetAbi) from `meta.json` —
+  identity (guid, name, description, overview, category, owner, image, targetAbi) from `meta.json` —
   `meta.json` is the single source of truth. `scripts/set_meta_version.py` stamps the version and
   timestamp and rejects anything that is not four segments `major.minor.patch.build`.
 - Both scripts take their inputs from environment variables and never interpolate anything into
