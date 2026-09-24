@@ -24,12 +24,13 @@ public static class LanguageHelper
         @"\b(?:non|not)[\s-]?forc",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Anime releases label their forced-equivalent track "Signs & Songs" rather than
-    // "Forced", and rarely set the container flag on it: S&S, S+S, SnS, Signs & Songs,
-    // Signs and Songs, Signs/Songs, or the same the other way round. The lookarounds stand
-    // in for \b, which cannot bracket "&"; they keep "S&S" from matching inside a longer word.
+    // Anime releases label their forced-equivalent track by naming it rather than setting the
+    // container flag. Sometimes that name is the pair — Signs & Songs, Songs and Signs, S&S,
+    // S+S, SnS — and just as often it is "Signs" or "Signs Only" on its own, which is what
+    // releases such as Yameii ship. The lookarounds stand in for \b, which cannot bracket "&";
+    // they also keep "signs" from matching inside "Designs" and "S&S" inside "SS&S".
     private static readonly Regex SignsAndSongsRegex = new(
-        @"(?<![\p{L}\p{N}])(?:s\s*[&+n]\s*s|signs\s*(?:&|and|/)\s*songs|songs\s*(?:&|and|/)\s*signs)(?![\p{L}\p{N}])",
+        @"(?<![\p{L}\p{N}])(?:s\s*[&+n]\s*s|signs(?:\s*(?:&|and|/)\s*songs)?|songs\s*(?:&|and|/)\s*signs)(?![\p{L}\p{N}])",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Fansub groups name their complete track "Full + Signs" or "Dialogue + Signs & Songs":
@@ -42,7 +43,7 @@ public static class LanguageHelper
     /// Determines whether a subtitle stream is "forced".
     /// Many media files do not set the container forced disposition flag and instead
     /// indicate it only in the stream title (e.g. "Forced", "Forcé", or the anime
-    /// "Signs &amp; Songs" / "S&amp;S"), so this checks both
+    /// "Signs", "Signs &amp; Songs" or "S&amp;S"), so this checks both
     /// the <see cref="MediaStream.IsForced"/> flag and forced keywords in the stream title
     /// and the composed display title.
     /// </summary>
