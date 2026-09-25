@@ -98,7 +98,10 @@ function renderLangList(listEl, languages) {
     if (codes.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'lf-empty';
-        empty.textContent = 'No languages added yet.';
+        // The message lives on the list itself: an empty global list and an empty series
+        // override mean very different things, and the reader needs the consequence
+        // rather than a neutral statement of emptiness.
+        empty.textContent = listEl.dataset.empty || 'No languages added yet.';
         listEl.appendChild(empty);
         setupListDragDrop(listEl);
         return;
@@ -298,13 +301,13 @@ function renderSeriesOverrides(overrides) {
             '<div class="lf-row">' +
                 '<div class="lf-col">' +
                     '<div class="lf-subsection-title">Audio</div>' +
-                    '<ul class="lf-chips" data-ov-role="audio"></ul>' +
+                    '<ul class="lf-chips" data-ov-role="audio" data-empty="Empty: the global audio list applies to this series."></ul>' +
                     '<div class="lf-add-row"><select></select>' +
                         '<button class="btnAddLang" type="button">+ Add</button></div>' +
                 '</div>' +
                 '<div class="lf-col">' +
                     '<div class="lf-subsection-title">Subtitles</div>' +
-                    '<ul class="lf-chips" data-ov-role="subtitle"></ul>' +
+                    '<ul class="lf-chips" data-ov-role="subtitle" data-empty="Empty: the global subtitle list applies to this series."></ul>' +
                     '<div class="lf-add-row"><select></select>' +
                         '<button class="btnAddLang" type="button">+ Add</button></div>' +
                 '</div>' +

@@ -118,7 +118,10 @@ test('populates users and the language catalogue from the API', async () => {
     await boot();
 
     assert.equal($('#selectUser').options.length, 2);
-    assert.match($('#audioLangList').textContent, /No languages added yet/);
+    assert.match($('#audioLangList').textContent, /will not change the audio track/);
+    // Each list states its own consequence: an empty subtitle list is the one that
+    // silently does nothing while the audio list looks correctly filled in.
+    assert.match($('#subtitleLangList').textContent, /will not change subtitles/);
     // placeholder + the three cultures the API returned
     assert.equal(controlsFor($('#audioLangList')).select.options.length, 4);
 });
@@ -242,7 +245,7 @@ test('switching users keeps each user\'s preferences separate', async () => {
     selectUser.value = USERS[1].Id;
     selectUser.dispatchEvent(new window.Event('change'));
 
-    assert.match($('#audioLangList').textContent, /No languages added yet/, 'Bob starts empty');
+    assert.match($('#audioLangList').textContent, /will not change the audio track/, 'Bob starts empty');
     addLanguages($('#audioLangList'), ['fr']);
 
     selectUser.value = USERS[0].Id;

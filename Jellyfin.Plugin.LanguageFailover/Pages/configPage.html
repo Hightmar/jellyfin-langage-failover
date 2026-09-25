@@ -24,6 +24,17 @@
 
         /* Native controls follow the browser's light/dark rendering so their
            dropdown popups stay legible instead of being forced to one scheme. */
+        /* For the one piece of advice that points outside this page. */
+        .lf-note {
+            margin-top: 1.4em;
+            padding: 0.85em 1em;
+            border-radius: 6px;
+            border: 1px solid var(--lf-border);
+            background: var(--lf-surface);
+            font-size: 0.92em;
+            opacity: 0.92;
+        }
+
         .lf-page select,
         .lf-page input[type="text"],
         .lf-page input[type="checkbox"] {
@@ -362,13 +373,14 @@
 
             <div class="lf-card">
                 <div class="lf-card-title">Global Language Priorities</div>
-                <p class="lf-card-subtitle">The first available match in the media wins. Subtitles are automatically skipped when the selected audio is already in one of your subtitle languages.</p>
+                <p class="lf-card-subtitle">The two lists work independently: the audio list only ever picks an audio track, the subtitle list only ever picks a subtitle track. <strong>Fill in both.</strong> A list left empty means the plugin does not touch that kind of track at all, and leaves whatever your server and client would have chosen.</p>
+                <p class="lf-card-subtitle">Within a list, the first language available in the file wins. Once the audio track is chosen, subtitles are skipped if that audio is already in a language you listed for subtitles &mdash; the two options below decide what happens instead.</p>
 
                 <div class="lf-row">
                     <div class="lf-col">
                         <div class="lf-subsection-title">Audio</div>
-                        <p class="lf-subsection-hint">Ordered from most to least preferred. Surround tracks win ties.</p>
-                        <ul id="audioLangList" class="lf-chips"></ul>
+                        <p class="lf-subsection-hint">Ordered from most to least preferred. Surround tracks win ties. Governs the audio track only.</p>
+                        <ul id="audioLangList" class="lf-chips" data-empty="Empty: the plugin will not change the audio track."></ul>
                         <div class="lf-add-row">
                             <select></select>
                             <button class="btnAddLang" type="button">+ Add</button>
@@ -377,8 +389,8 @@
 
                     <div class="lf-col">
                         <div class="lf-subsection-title">Subtitles</div>
-                        <p class="lf-subsection-hint">Ordered from most to least preferred.</p>
-                        <ul id="subtitleLangList" class="lf-chips"></ul>
+                        <p class="lf-subsection-hint">Ordered from most to least preferred. Add the languages you can read &mdash; including the one you listen in, which is what lets the plugin turn subtitles off or fall back to a signs track.</p>
+                        <ul id="subtitleLangList" class="lf-chips" data-empty="Empty: the plugin will not change subtitles, whatever the audio list says."></ul>
                         <div class="lf-add-row">
                             <select></select>
                             <button class="btnAddLang" type="button">+ Add</button>
@@ -409,6 +421,17 @@
                         <span class="lf-toggle-hint">Instead of disabling subtitles, keep forced ones to translate foreign dialog or on-screen text — including a dubbed anime's signs track, whether it is called Signs, Signs Only, Signs &amp; Songs or S&amp;S.</span>
                     </span>
                 </label>
+
+                <div class="lf-note">
+                    <strong>One Jellyfin setting can undo all of this.</strong> If a user's
+                    <em>Subtitle mode</em> (Jellyfin user settings &rarr; Playback) is set to
+                    <em>Only forced</em>, Jellyfin re-picks the subtitle track by itself whenever the
+                    stream is renegotiated &mdash; after a seek, or when a plugin such as Intro Skipper
+                    skips ahead &mdash; and in that mode it only accepts a track flagged forced inside
+                    the file. Tracks named <em>Forced</em> or <em>Signs</em> without that flag are the
+                    common case, so the subtitles this plugin chose are dropped mid-episode. Leave
+                    <em>Subtitle mode</em> at its default and let this plugin make the decision.
+                </div>
             </div>
 
             <div class="lf-card">
