@@ -5,6 +5,15 @@ using MediaBrowser.Model.Globalization;
 namespace Jellyfin.Plugin.LanguageFailover.Services;
 
 /// <summary>
+/// An original-version audio stream, and the signal that identified it as such.
+/// The signal is carried so the log says why a track was chosen, which is the first
+/// question asked whenever the wrong one is.
+/// </summary>
+/// <param name="Index">The index of the chosen audio stream.</param>
+/// <param name="Signal">How it was recognised: the container flag, the track title, or the item's original language.</param>
+public readonly record struct OriginalAudioSelection(int Index, string Signal);
+
+/// <summary>
 /// Helper for language matching and stream selection.
 /// </summary>
 public static class LanguageHelper
@@ -143,26 +152,68 @@ public static class LanguageHelper
     }
 
     /// <summary>
-    /// Selects the audio stream marked as the original version (via stream title keywords
-    /// like "Original", "VO", "Version Originale"). Among matching streams, prefers the
-    /// highest channel count.
+    /// Selects the audio stream that carries the original version, trying three signals in
+    /// order of trustworthiness: the container's "original" disposition, an "Original" /
+    /// "VO" / "Version Originale" keyword in the track title, and finally the item's own
+    /// original language from its metadata. Among equally original tracks, the one with the
+    /// highest channel count wins.
     /// </summary>
     /// <param name="streams">All media streams for the item.</param>
-    /// <returns>The index of the best original audio stream, or null if none is tagged as such.</returns>
-    public static int? SelectOriginalAudioStream(IReadOnlyList<MediaStream> streams)
+    /// <param name="originalLanguage">The item's original language, or null when unknown.</param>
+    /// <param name="localizationManager">The localization manager, for ISO 639 matching.</param>
+    /// <returns>The chosen stream and the signal that found it, or null if no signal did.</returns>
+    public static OriginalAudioSelection? SelectOriginalAudioStream(
+        IReadOnlyList<MediaStream> streams,
+        string? originalLanguage,
+        ILocalizationManager localizationManager)
     {
-        var candidates = streams
-            .Where(s => s.Type == MediaStreamType.Audio)
-            .Where(s => !string.IsNullOrEmpty(s.Title) && OriginalVersionRegex.IsMatch(s.Title))
-            .ToList();
-
-        if (candidates.Count == 0)
+        var audio = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
+        if (audio.Count == 0)
         {
             return null;
         }
 
-        return candidates.OrderByDescending(s => s.Channels ?? 0).First().Index;
+        // What the track itself claims comes first. The container's own "original"
+        // disposition is the machine-readable one, so it wins over a title, the same way
+        // the forced flag wins over a forced keyword.
+        var flagged = audio.Where(s => s.IsOriginal).ToList();
+        if (flagged.Count > 0)
+        {
+            return new OriginalAudioSelection(BestOf(flagged), "container flag");
+        }
+
+        var titled = audio
+            .Where(s => !string.IsNullOrEmpty(s.Title) && OriginalVersionRegex.IsMatch(s.Title))
+            .ToList();
+        if (titled.Count > 0)
+        {
+            return new OriginalAudioSelection(BestOf(titled), "track title");
+        }
+
+        // Nothing on any track says which one is original, which is the normal state of a
+        // release carrying a dozen untitled dubs. The item's metadata knows the answer, and
+        // it is the only signal that does: a German film stays German here even though the
+        // viewer's priority list has never heard of German.
+        if (!string.IsNullOrEmpty(originalLanguage))
+        {
+            var spoken = audio
+                .Where(s => LanguageMatches(s.Language, originalLanguage, localizationManager))
+                .ToList();
+
+            if (spoken.Count > 0)
+            {
+                return new OriginalAudioSelection(BestOf(spoken), "original language " + originalLanguage);
+            }
+        }
+
+        return null;
     }
+
+    /// <summary>
+    /// Among equally original tracks, the one with the most channels wins.
+    /// </summary>
+    private static int BestOf(List<MediaStream> matches)
+        => matches.OrderByDescending(s => s.Channels ?? 0).First().Index;
 
     /// <summary>
     /// Selects a forced subtitle stream in the given language, if available.

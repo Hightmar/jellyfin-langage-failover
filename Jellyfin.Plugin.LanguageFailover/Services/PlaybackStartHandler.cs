@@ -161,12 +161,17 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
                 PreferForcedWhenAudioMatches = prefs.PreferForcedWhenAudioMatches
             };
 
+            // The item knows its original language even when not one track says so; an
+            // episode inherits it from its series. Read once, used only if the viewer asked
+            // for original audio and no track identified itself.
+            var originalLanguage = eventArgs.Item.GetInheritedOriginalLanguage();
+
             var sessionId = eventArgs.Session.Id;
 
             await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
 
             // Audio stream selection — returns the language of the selected audio stream
-            var selectedAudioLang = await TrySetAudioStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name).ConfigureAwait(false);
+            var selectedAudioLang = await TrySetAudioStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name, originalLanguage).ConfigureAwait(false);
 
             await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
 
@@ -200,17 +205,21 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
         IReadOnlyList<MediaStream> streams,
         UserLanguagePreference prefs,
         string sessionId,
-        string? itemName)
+        string? itemName,
+        string? originalLanguage)
     {
         int? bestAudioIndex = null;
 
-        // If user prefers original version, try to find an audio stream tagged as "original" first
+        // The original version wins over the priority list when the viewer asked for it —
+        // including when its language is not on that list at all, which is the whole point:
+        // "whatever language this was made in" is not something a list of languages can say.
         if (prefs.PreferOriginalAudio)
         {
-            bestAudioIndex = LanguageHelper.SelectOriginalAudioStream(streams);
-            if (bestAudioIndex is not null)
+            var original = LanguageHelper.SelectOriginalAudioStream(streams, originalLanguage, _localizationManager);
+            if (original is not null)
             {
-                LogSelectedOriginalAudio(bestAudioIndex.Value, itemName);
+                bestAudioIndex = original.Value.Index;
+                LogSelectedOriginalAudio(original.Value.Index, itemName, original.Value.Signal);
             }
         }
 

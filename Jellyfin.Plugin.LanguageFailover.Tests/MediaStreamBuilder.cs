@@ -11,13 +11,15 @@ public static class MediaStreamBuilder
         int index,
         string? language,
         int? channels = null,
-        string? title = null) => new()
+        string? title = null,
+        bool isOriginal = false) => new()
     {
         Index = index,
         Type = MediaStreamType.Audio,
         Language = language,
         Channels = channels,
         Title = title,
+        IsOriginal = isOriginal,
     };
 
     public static MediaStream Subtitle(

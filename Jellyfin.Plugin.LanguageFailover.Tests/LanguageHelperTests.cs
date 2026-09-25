@@ -231,6 +231,14 @@ public class SelectBestAudioStreamTests
 
 public class SelectOriginalAudioStreamTests
 {
+    private readonly FakeLocalizationManager _loc = new();
+
+    private int? Original(IReadOnlyList<MediaStream> streams, string? originalLanguage = null)
+        => LanguageHelper.SelectOriginalAudioStream(streams, originalLanguage, _loc)?.Index;
+
+    private string? Signal(IReadOnlyList<MediaStream> streams, string? originalLanguage = null)
+        => LanguageHelper.SelectOriginalAudioStream(streams, originalLanguage, _loc)?.Signal;
+
     [Theory]
     [InlineData("Original")]
     [InlineData("Original Audio")]
@@ -243,7 +251,7 @@ public class SelectOriginalAudioStreamTests
     public void DetectsOriginalVersionKeywords(string title)
     {
         var streams = new[] { Audio(1, "en"), Audio(2, "ja", title: title) };
-        Assert.Equal(2, LanguageHelper.SelectOriginalAudioStream(streams));
+        Assert.Equal(2, Original(streams));
     }
 
     [Theory]
@@ -255,7 +263,7 @@ public class SelectOriginalAudioStreamTests
     public void DoesNotMatchUnrelatedTitles(string? title)
     {
         var streams = new[] { Audio(1, "en"), Audio(2, "ja", title: title) };
-        Assert.Null(LanguageHelper.SelectOriginalAudioStream(streams));
+        Assert.Null(Original(streams));
     }
 
     [Fact]
@@ -266,14 +274,83 @@ public class SelectOriginalAudioStreamTests
             Audio(1, "ja", channels: 2, title: "Original"),
             Audio(2, "ja", channels: 6, title: "Version Originale"),
         };
-        Assert.Equal(2, LanguageHelper.SelectOriginalAudioStream(streams));
+        Assert.Equal(2, Original(streams));
     }
 
     [Fact]
     public void IgnoresSubtitleStreamsTaggedOriginal()
     {
         var streams = new[] { Subtitle(1, "ja", title: "Original") };
-        Assert.Null(LanguageHelper.SelectOriginalAudioStream(streams));
+        Assert.Null(Original(streams));
+    }
+
+    [Fact]
+    public void ContainerFlagWinsOverATitleOnAnotherTrack()
+    {
+        // The disposition is machine-readable and the title is a guess, so the flag is
+        // trusted first — the same order IsForcedSubtitle uses.
+        var streams = new[] { Audio(1, "ja", title: "Original"), Audio(2, "de", isOriginal: true) };
+
+        Assert.Equal(2, Original(streams));
+        Assert.Equal("container flag", Signal(streams));
+    }
+
+    [Fact]
+    public void FallsBackToTheItemsOriginalLanguageWhenNoTrackSaysSo()
+    {
+        // The case this exists for: a release with a pile of untitled dubs and no flag
+        // anywhere. Only the metadata knows the film was made in German, and the viewer's
+        // priority list has never heard of German.
+        var streams = new[] { Audio(1, "zh"), Audio(2, "en"), Audio(3, "de"), Audio(4, "ja") };
+
+        Assert.Equal(3, Original(streams, "de"));
+        Assert.Equal("original language de", Signal(streams, "de"));
+    }
+
+    [Fact]
+    public void MatchesTheOriginalLanguageAcrossIsoFormats()
+    {
+        // Metadata says "de", the file is tagged "ger": the same language either way.
+        var streams = new[] { Audio(1, "eng"), Audio(2, "ger") };
+
+        Assert.Equal(2, Original(streams, "de"));
+    }
+
+    [Fact]
+    public void PrefersTheHighestChannelCountAmongTracksInTheOriginalLanguage()
+    {
+        var streams = new[] { Audio(1, "de", channels: 2), Audio(2, "de", channels: 6) };
+
+        Assert.Equal(2, Original(streams, "de"));
+    }
+
+    [Fact]
+    public void TaggedTracksStillWinOverTheMetadata()
+    {
+        // A release that labels its VO is answering the question directly; the metadata is
+        // only there for the ones that do not.
+        var streams = new[] { Audio(1, "de"), Audio(2, "ja", title: "VO") };
+
+        Assert.Equal(2, Original(streams, "de"));
+        Assert.Equal("track title", Signal(streams, "de"));
+    }
+
+    [Fact]
+    public void ReturnsNullWhenTheOriginalLanguageIsNotInTheFile()
+    {
+        // No German track to be had: fall through to the priority list rather than invent one.
+        var streams = new[] { Audio(1, "zh"), Audio(2, "en") };
+
+        Assert.Null(Original(streams, "de"));
+    }
+
+    [Fact]
+    public void ReturnsNullWhenTheItemHasNoOriginalLanguage()
+    {
+        var streams = new[] { Audio(1, "zh"), Audio(2, "en") };
+
+        Assert.Null(Original(streams, null));
+        Assert.Null(Original(streams, string.Empty));
     }
 }
 

@@ -40,8 +40,8 @@ public partial class PlaybackStartHandler
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Language Failover: Selected original-version audio stream at index {Index} for '{ItemName}'")]
-    private partial void LogSelectedOriginalAudio(int index, string? itemName);
+        Message = "Language Failover: Selected original-version audio stream at index {Index} for '{ItemName}' (via {Signal})")]
+    private partial void LogSelectedOriginalAudio(int index, string? itemName, string signal);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
