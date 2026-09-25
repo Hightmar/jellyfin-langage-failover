@@ -10,15 +10,19 @@ on:
   pull_request:
     branches: [main, develop]
 
+# The runner image is pinned rather than left on ubuntu-latest, for the same reason the
+# analyzer package is pinned in Directory.Build.props: with -warnaserror, a runner that
+# rolls to a new Ubuntu on its own must not be able to break the build with no commit
+# behind it. ubuntu-latest becomes Ubuntu 26 on 2026-10-19; move this deliberately.
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -33,15 +37,15 @@ jobs:
 
   web-tests:
     name: Config page tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install
         run: npm ci

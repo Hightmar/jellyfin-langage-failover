@@ -8,12 +8,16 @@ on:
 permissions:
   contents: write
 
+# The runner image is pinned rather than left on ubuntu-latest, for the same reason the
+# analyzer package is pinned in Directory.Build.props: with -warnaserror, a runner that
+# rolls to a new Ubuntu on its own must not be able to break the build with no commit
+# behind it. ubuntu-latest becomes Ubuntu 26 on 2026-10-19; move this deliberately.
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -27,7 +31,7 @@ jobs:
           echo "Tag is on main — proceeding with release"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -112,7 +116,7 @@ jobs:
           echo "Checksum: $CHECKSUM"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Language Failover ${{ steps.meta.outputs.version }}
