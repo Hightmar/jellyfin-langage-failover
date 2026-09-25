@@ -14,11 +14,11 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 
 ## Features
 
-- **Ordered language priorities** — Define a ranked list of preferred languages for audio and subtitles (e.g., Audio: Chinese > Korean > Japanese > English > French). The first available match wins. Reorder by drag-and-drop or with the up/down arrows.
+- **Ordered language priorities** — Define a ranked list of preferred languages for audio and subtitles (e.g., Audio: Chinese > Korean > Japanese > English > French). The first available match wins. Reorder by drag-and-drop or with the up/down arrows. The two lists are independent and both matter: the audio list only picks audio tracks, the subtitle list only picks subtitle tracks, and a list left empty means that kind of track is left alone.
 - **Prefer original audio (VO)** — Optional toggle that picks the track tagged as "Original" / "VO" / "Version Originale" over the priority list. Useful when watching a foreign film in its original language regardless of dubs available.
 - **Smart subtitle behavior** — Subtitles are enabled only when they would add something. If the selected audio is in a language you rank at least as highly as the best subtitle track available, subtitles are turned off. With subtitles ranked *English > French* and French audio, English subtitles are still selected — English is your first choice, so it wins; if the file has no English subtitles, subtitles are turned off instead.
 - **Forced subtitles when audio matches your language** — Optional toggle: instead of disabling subtitles when audio is already in your language, keep forced subtitles on to translate foreign dialog or signage.
-- **Forced subtitle fallback** — Prefers complete (non-forced) subtitles, but falls back to forced subtitles when they're the only option available. Forced tracks are recognised from both the container forced flag **and** the track title (e.g. *Forced*, *Forcé*, *Forzado*, or the anime *Signs & Songs* / *S&S*), so a forced track stays correctly classified even when the media file leaves the forced flag unset — while titles such as *Non-Forced* are never misread as forced.
+- **Forced subtitle fallback** — Prefers complete (non-forced) subtitles, but falls back to forced subtitles when they're the only option available. Forced tracks are recognised from both the container forced flag **and** the track title (e.g. *Forced*, *Forcé*, *Forzado*, or an anime signs track however it is named — *Signs*, *Signs Only*, *Signs & Songs*, *S&S*), so a forced track stays correctly classified even when the media file leaves the forced flag unset — while titles such as *Non-Forced* are never misread as forced.
 - **Per-series overrides** — Override language preferences for specific series. For example, keep your global preferences but force a specific anime to always play with its original audio.
 - **Per-user configuration** — Each user has independent language preferences and series overrides.
 - **Works with all clients** — Web, Android, iOS, TV apps, Kodi — commands are sent via WebSocket so any client that supports `GeneralCommand` will respond.
@@ -136,8 +136,10 @@ receives no further fixes, and upgrading the server is the way to get new ones.
 
 ### The plugin doesn't change tracks
 
-- Verify the plugin is loaded: check Jellyfin logs for `Loaded plugin: Language Failover`
+- **Check that both language lists are filled in.** The audio list and the subtitle list are independent: the audio list only ever picks an audio track, the subtitle list only ever picks a subtitle track. A subtitle list left empty means the plugin never touches subtitles, no matter what the audio list says. This is the most common cause by a wide margin.
 - Verify the user has preferences configured and the plugin is enabled for that user
+- Verify the plugin is loaded: check Jellyfin logs for `Loaded plugin: Language Failover`
+- **Restart the client.** A client that was already open when the plugin was installed or updated can keep running without it, and the symptom is simply that nothing ever changes. Closing and reopening the app fixes it.
 - Enable debug logging in Jellyfin (`Logging:LogLevel:Jellyfin.Plugin.LanguageFailover` = `Debug`) to see detailed selection info
 
 ### Subtitles stay forced instead of switching to the complete track
@@ -145,6 +147,16 @@ receives no further fixes, and upgrading the server is the way to get new ones.
 - The plugin classifies a subtitle as forced when the container forced flag is set **or** the track title contains a forced keyword (`forced`, `forcé`, `forzado`, `Signs & Songs`, `S&S`, …). Make sure your complete track's title is not accidentally labelled with one of these words.
 - If a track is genuinely forced but carries neither the forced flag nor any keyword in its title, it is indistinguishable from a complete track — set the flag at the source, e.g. `mkvpropedit file.mkv --edit track:s2 --set flag-forced=1`.
 - Enable debug logging and check the `Setting subtitle stream to index N` line to confirm which track was selected.
+
+### Subtitles are dropped mid-episode, e.g. after skipping an intro
+
+Check the user's **Subtitle mode** in their Jellyfin user settings (not this plugin's page). If it is set to **Only forced**, Jellyfin re-picks the subtitle track by itself every time the stream is renegotiated — after a seek, or when a plugin such as Intro Skipper jumps ahead — and in that mode it accepts only a track carrying the forced flag *inside the file*. A track named `Forced` or `Signs` without that flag is rejected, so the track this plugin chose is discarded and subtitles go off.
+
+Left at its default, Jellyfin instead restores the selection it remembers for that episode, which is the one this plugin made. So the fix is to leave **Subtitle mode** alone and let the plugin decide.
+
+### Two tracks with the same name, and the wrong one is picked
+
+If a file carries two subtitle tracks with identical titles, the same language and no forced flag to tell them apart, nothing distinguishes them — the plugin takes the first. There is no fix in the plugin; the tracks have to be told apart at the source, by titling them differently or by setting the forced flag on the one that deserves it.
 
 ### Tracks change but revert immediately
 
