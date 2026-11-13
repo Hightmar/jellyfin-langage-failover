@@ -141,6 +141,9 @@ Shared MSBuild properties live in `Directory.Build.props`; package versions are 
 `dotnet-version` in both workflows and the `net10.0` path in the release workflow's packaging
 step all move with it. CI builds with `-warnaserror`, so keep the tree warning-clean.
 
+Resolved package versions are locked in each project's `packages.lock.json` and CI restores with
+`--locked-mode`: commit the lock files whenever a package changes.
+
 **The analyzer set is a pinned NuGet package** (`Microsoft.CodeAnalysis.NetAnalyzers` in
 `Directory.Packages.props`), not whatever the installed SDK ships, and `global.json` pins the
 SDK feature band. This is deliberate: with `-warnaserror`, an SDK upgrade on the GitHub runner
