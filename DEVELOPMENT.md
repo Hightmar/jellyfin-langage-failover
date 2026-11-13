@@ -181,8 +181,9 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
   `scripts/check_release_version.py`), `tests` (calls `build.yml`),
   `package` (builds the zip) and `publish` (attests, creates the release, updates
   `manifest.json` + `meta.json` on `main`). Only `publish` gets a write token.
-- In the workflows: no `${{ }}` inside `run:` scripts (go through `env:`), and
-  `persist-credentials: false` on every checkout except in `publish`.
+- In the workflows: no `${{ }}` inside `run:` scripts (go through `env:`),
+  `persist-credentials: false` on every checkout except in `publish`, and actions pinned to a
+  commit SHA (`@<sha> # vX.Y.Z`). Dependabot keeps the pins up to date.
 - If `publish` fails after creating the release, delete the release (keep the tag) and re-run
   the failed jobs.
 - **Don't hand-edit `manifest.json`.** `scripts/update_manifest.py` writes it, reading the plugin's
