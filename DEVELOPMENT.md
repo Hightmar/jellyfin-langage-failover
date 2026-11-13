@@ -13,6 +13,8 @@ Keep this updated when behaviour or workflow changes.
   - Timing matters: `PlayerInitDelay` (1500 ms) before sending anything and
     `BetweenCommandsDelay` (500 ms) between the audio and subtitle commands. Some clients
     revert selections if commands arrive too early. Don't lower these without testing on TV apps.
+  - After each delay, `IsStillPlaying` checks the session is still on the same item and media
+    source; if it moved on (next episode, stop, other version), nothing more is sent.
   - Streams are read for `eventArgs.MediaSourceId` when it parses as a Guid, falling back to
     `eventArgs.Item.Id`. An item with several versions has one `BaseItem` per file, so the
     session may be on a different one than `Item`; `MediaSourceId` is also not a Guid for live

@@ -34,6 +34,11 @@ public partial class PlaybackStartHandler
     private partial void LogProcessing(string? itemName, string userKey, string audio, string sub);
 
     [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Language Failover: Playback moved on from '{ItemName}' before its tracks were set; nothing sent")]
+    private partial void LogPlaybackMovedOn(string? itemName);
+
+    [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Language Failover: Error processing playback start event")]
     private partial void LogUnhandledError(Exception exception);

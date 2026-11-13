@@ -128,22 +128,63 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
                 eventArgs.Item.GetInheritedOriginalLanguage(),
                 _localizationManager);
 
-            var sessionId = eventArgs.Session.Id;
+            var session = eventArgs.Session;
+            var itemId = eventArgs.Item.Id;
             var itemName = eventArgs.Item.Name;
 
             await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
 
-            await ApplyAudio(plan, effectivePrefs, sessionId, itemName).ConfigureAwait(false);
+            if (!IsStillPlaying(session, itemId, eventArgs.MediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplyAudio(plan, effectivePrefs, session.Id, itemName).ConfigureAwait(false);
 
             await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
 
-            await ApplySubtitles(plan, effectivePrefs, sessionId, itemName).ConfigureAwait(false);
+            if (!IsStillPlaying(session, itemId, eventArgs.MediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplySubtitles(plan, effectivePrefs, session.Id, itemName).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             LogUnhandledError(ex);
         }
     }
+
+    /// <summary>
+    /// Whether the session still plays the item and source a playback start was raised for.
+    /// </summary>
+    /// <param name="nowPlayingItemId">The session's current item, or null when stopped.</param>
+    /// <param name="nowPlayingMediaSourceId">The session's current media source, if known.</param>
+    /// <param name="itemId">The item the event was raised for.</param>
+    /// <param name="mediaSourceId">The media source the event was raised for, if known.</param>
+    /// <returns>False once the session has stopped or moved on to another item or version.</returns>
+    public static bool IsStillPlaying(Guid? nowPlayingItemId, string? nowPlayingMediaSourceId, Guid itemId, string? mediaSourceId)
+    {
+        if (nowPlayingItemId != itemId)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(nowPlayingMediaSourceId) || string.IsNullOrEmpty(mediaSourceId))
+        {
+            return true;
+        }
+
+        return Guid.TryParse(nowPlayingMediaSourceId, out var now) && Guid.TryParse(mediaSourceId, out var started)
+            ? now == started
+            : string.Equals(nowPlayingMediaSourceId, mediaSourceId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStillPlaying(SessionInfo session, Guid itemId, string? mediaSourceId)
+        => IsStillPlaying(session.NowPlayingItem?.Id, session.PlayState?.MediaSourceId, itemId, mediaSourceId);
 
     private async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)
     {
