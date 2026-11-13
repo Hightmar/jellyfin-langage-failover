@@ -46,116 +46,18 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
     }
 
     /// <inheritdoc />
-    public async Task OnEvent(PlaybackStartEventArgs eventArgs)
+    public Task OnEvent(PlaybackStartEventArgs eventArgs)
     {
         try
         {
-            if (eventArgs.Item is null || eventArgs.Session is null)
-            {
-                return;
-            }
-
-            if (eventArgs.Users is null || eventArgs.Users.Count == 0)
-            {
-                return;
-            }
-
-            var config = Plugin.Instance?.Configuration;
-            if (config is null)
-            {
-                return;
-            }
-
-            var userKey = eventArgs.Users[0].Id.ToString("N");
-
-            var prefs = config.UserPreferences.Find(p => string.Equals(p.UserId, userKey, StringComparison.OrdinalIgnoreCase));
-            if (prefs is null || !prefs.Enabled)
-            {
-                return;
-            }
-
-            SeriesLanguageOverride? seriesOverride = null;
-            if (eventArgs.Item is Episode episode && episode.Series is not null)
-            {
-                seriesOverride = TrackSelectionPlanner.FindSeriesOverride(prefs, episode.Series.Id);
-            }
-
-            var effectivePrefs = TrackSelectionPlanner.ApplySeriesOverride(prefs, seriesOverride);
-
-            if (seriesOverride is not null && _logger.IsEnabled(LogLevel.Information))
-            {
-                LogSeriesOverride(
-                    seriesOverride.SeriesName,
-                    string.Join(", ", effectivePrefs.AudioLanguages),
-                    string.Join(", ", effectivePrefs.SubtitleLanguages));
-            }
-
-            if (effectivePrefs.AudioLanguages.Count == 0 && effectivePrefs.SubtitleLanguages.Count == 0)
-            {
-                return;
-            }
-
-            // An item with several versions has one BaseItem per file, and the session may be on
-            // another one than eventArgs.Item. MediaSourceId is not a Guid for live streams.
-            var streamOwnerId = Guid.TryParse(eventArgs.MediaSourceId, out var mediaSourceId) && mediaSourceId != Guid.Empty
-                ? mediaSourceId
-                : eventArgs.Item.Id;
-
-            var streams = _mediaSourceManager.GetMediaStreams(streamOwnerId);
-            if (streams.Count == 0 && streamOwnerId != eventArgs.Item.Id)
-            {
-                streams = _mediaSourceManager.GetMediaStreams(eventArgs.Item.Id);
-            }
-
-            if (streams.Count == 0)
-            {
-                LogNoStreams(eventArgs.Item.Id);
-                return;
-            }
-
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                LogProcessing(
-                    eventArgs.Item.Name,
-                    userKey,
-                    string.Join(", ", effectivePrefs.AudioLanguages),
-                    string.Join(", ", effectivePrefs.SubtitleLanguages));
-            }
-
-            var plan = TrackSelectionPlanner.Plan(
-                streams,
-                effectivePrefs,
-                eventArgs.Item.GetInheritedOriginalLanguage(),
-                _localizationManager);
-
-            var session = eventArgs.Session;
-            var itemId = eventArgs.Item.Id;
-            var itemName = eventArgs.Item.Name;
-
-            await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
-
-            if (!IsStillPlaying(session, itemId, eventArgs.MediaSourceId))
-            {
-                LogPlaybackMovedOn(itemName);
-                return;
-            }
-
-            await ApplyAudio(plan, effectivePrefs, session.Id, itemName).ConfigureAwait(false);
-
-            await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
-
-            if (!IsStillPlaying(session, itemId, eventArgs.MediaSourceId))
-            {
-                LogPlaybackMovedOn(itemName);
-                return;
-            }
-
-            await ApplySubtitles(plan, effectivePrefs, session.Id, itemName).ConfigureAwait(false);
+            Handle(eventArgs);
         }
         catch (Exception ex)
         {
             LogUnhandledError(ex);
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -185,6 +87,127 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
 
     private static bool IsStillPlaying(SessionInfo session, Guid itemId, string? mediaSourceId)
         => IsStillPlaying(session.NowPlayingItem?.Id, session.PlayState?.MediaSourceId, itemId, mediaSourceId);
+
+    private void Handle(PlaybackStartEventArgs eventArgs)
+    {
+        if (eventArgs.Item is null || eventArgs.Session is null)
+        {
+            return;
+        }
+
+        if (eventArgs.Users is null || eventArgs.Users.Count == 0)
+        {
+            return;
+        }
+
+        var config = Plugin.Instance?.Configuration;
+        if (config is null)
+        {
+            return;
+        }
+
+        var userKey = eventArgs.Users[0].Id.ToString("N");
+
+        var prefs = config.UserPreferences.Find(p => string.Equals(p.UserId, userKey, StringComparison.OrdinalIgnoreCase));
+        if (prefs is null || !prefs.Enabled)
+        {
+            return;
+        }
+
+        SeriesLanguageOverride? seriesOverride = null;
+        if (eventArgs.Item is Episode episode && episode.Series is not null)
+        {
+            seriesOverride = TrackSelectionPlanner.FindSeriesOverride(prefs, episode.Series.Id);
+        }
+
+        var effectivePrefs = TrackSelectionPlanner.ApplySeriesOverride(prefs, seriesOverride);
+
+        if (seriesOverride is not null && _logger.IsEnabled(LogLevel.Information))
+        {
+            LogSeriesOverride(
+                seriesOverride.SeriesName,
+                string.Join(", ", effectivePrefs.AudioLanguages),
+                string.Join(", ", effectivePrefs.SubtitleLanguages));
+        }
+
+        if (effectivePrefs.AudioLanguages.Count == 0 && effectivePrefs.SubtitleLanguages.Count == 0)
+        {
+            return;
+        }
+
+        // An item with several versions has one BaseItem per file, and the session may be on
+        // another one than eventArgs.Item. MediaSourceId is not a Guid for live streams.
+        var streamOwnerId = Guid.TryParse(eventArgs.MediaSourceId, out var mediaSourceId) && mediaSourceId != Guid.Empty
+            ? mediaSourceId
+            : eventArgs.Item.Id;
+
+        var streams = _mediaSourceManager.GetMediaStreams(streamOwnerId);
+        if (streams.Count == 0 && streamOwnerId != eventArgs.Item.Id)
+        {
+            streams = _mediaSourceManager.GetMediaStreams(eventArgs.Item.Id);
+        }
+
+        if (streams.Count == 0)
+        {
+            LogNoStreams(eventArgs.Item.Id);
+            return;
+        }
+
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            LogProcessing(
+                eventArgs.Item.Name,
+                userKey,
+                string.Join(", ", effectivePrefs.AudioLanguages),
+                string.Join(", ", effectivePrefs.SubtitleLanguages));
+        }
+
+        var plan = TrackSelectionPlanner.Plan(
+            streams,
+            effectivePrefs,
+            eventArgs.Item.GetInheritedOriginalLanguage(),
+            _localizationManager);
+
+        // Jellyfin awaits each consumer while the client's playback report waits for its response,
+        // so the delayed part runs detached.
+        _ = ApplyPlanAsync(plan, effectivePrefs, eventArgs.Session, eventArgs.Item.Id, eventArgs.Item.Name, eventArgs.MediaSourceId);
+    }
+
+    private async Task ApplyPlanAsync(
+        TrackSelectionPlan plan,
+        UserLanguagePreference prefs,
+        SessionInfo session,
+        Guid itemId,
+        string? itemName,
+        string? mediaSourceId)
+    {
+        try
+        {
+            await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
+
+            if (!IsStillPlaying(session, itemId, mediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplyAudio(plan, prefs, session.Id, itemName).ConfigureAwait(false);
+
+            await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
+
+            if (!IsStillPlaying(session, itemId, mediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplySubtitles(plan, prefs, session.Id, itemName).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogUnhandledError(ex);
+        }
+    }
 
     private async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)
     {
