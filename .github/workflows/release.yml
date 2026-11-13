@@ -167,7 +167,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Download the release zip
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -196,6 +196,7 @@ jobs:
 
       - name: Update manifest.json and meta.json on main
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
           CHANGELOG: ${{ needs.prepare.outputs.changelog }}
           TIMESTAMP: ${{ needs.prepare.outputs.timestamp }}
@@ -215,5 +216,6 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Release ${VERSION}: update manifest and meta.json"
-            git push origin main
+            AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" push origin main
           fi
