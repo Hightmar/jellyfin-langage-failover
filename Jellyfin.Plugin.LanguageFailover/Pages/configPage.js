@@ -18,6 +18,7 @@ const FALLBACK_LANGS = [
 
 let currentConfig = null;
 let currentUserId = null;
+let knownUserKeys = null;
 let currentView = null;
 let culturesLoaded = false;
 
@@ -465,6 +466,11 @@ function doSave() {
     if (!currentUserId) return;
     saveUserPrefsToConfig(currentUserId, getCurrentPrefs());
 
+    if (knownUserKeys) {
+        currentConfig.UserPreferences = currentConfig.UserPreferences.filter(
+            (p) => knownUserKeys.has(String(p.UserId).toLowerCase()));
+    }
+
     ApiClient.updatePluginConfiguration(pluginId, currentConfig)
         .then(() => ApiClient.getPluginConfiguration(pluginId))
         .then((config) => {
@@ -487,6 +493,7 @@ export default function (view) {
             .then((users) => {
                 const selectUser = view.querySelector('#selectUser');
                 const previousUserId = currentUserId;
+                knownUserKeys = new Set(users.map((u) => stripHyphens(u.Id).toLowerCase()));
 
                 selectUser.innerHTML = '';
                 users.forEach((user) => {

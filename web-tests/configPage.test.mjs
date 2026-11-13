@@ -339,3 +339,20 @@ test('a slow search response never replaces a newer one', async () => {
 
     assert.equal($('#seriesSearchResults').textContent, 'Result for frieren');
 });
+
+test('saving drops the preferences of users that no longer exist', async () => {
+    stored = {
+        UserPreferences: [
+            { UserId: 'aaaaaaaabbbbccccddddeeeeeeeeeeee', AudioLanguages: ['ja'], SubtitleLanguages: [], SeriesOverrides: [] },
+            { UserId: '99999999999999999999999999999999', AudioLanguages: ['fr'], SubtitleLanguages: [], SeriesOverrides: [] },
+        ],
+    };
+    await boot();
+
+    click($('#btnSave'));
+    await settle();
+
+    const ids = saved.UserPreferences.map((p) => p.UserId);
+    assert.ok(ids.includes('aaaaaaaabbbbccccddddeeeeeeeeeeee'));
+    assert.ok(!ids.includes('99999999999999999999999999999999'));
+});
