@@ -356,3 +356,28 @@ test('saving drops the preferences of users that no longer exist', async () => {
     assert.ok(ids.includes('aaaaaaaabbbbccccddddeeeeeeeeeeee'));
     assert.ok(!ids.includes('99999999999999999999999999999999'));
 });
+
+test('the page says when there are unsaved changes, until they are saved', async () => {
+    await boot();
+    assert.equal($('#dirtyIndicator').hidden, true, 'clean after loading');
+
+    addLanguages($('#audioLangList'), ['ja']);
+    assert.equal($('#dirtyIndicator').hidden, false, 'dirty after an edit');
+
+    click($('#btnSave'));
+    await settle();
+    assert.equal($('#dirtyIndicator').hidden, true, 'clean after saving');
+});
+
+test('toggles and series overrides count as unsaved changes', async () => {
+    await boot();
+    const toggle = $('#chkPreferOriginal');
+    toggle.checked = !toggle.checked;
+    toggle.dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert.equal($('#dirtyIndicator').hidden, false, 'a toggle');
+
+    click($('#btnSave'));
+    await settle();
+    await addSeriesOverride();
+    assert.equal($('#dirtyIndicator').hidden, false, 'an override');
+});

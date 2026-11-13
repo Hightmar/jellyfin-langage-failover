@@ -186,6 +186,7 @@ function setupListDragDrop(listEl) {
         codes.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, moved);
 
         renderPair(listEl, codes);
+        setDirty(true);
     });
 }
 
@@ -216,6 +217,7 @@ function handleListAction(e) {
     }
 
     renderPair(listEl, codes);
+    setDirty(true);
 }
 
 /** Handles an "+ Add" click next to any language list, global or per-series. */
@@ -230,6 +232,7 @@ function handleAddLanguage(btn) {
     const codes = getCodesFromList(listEl);
     if (codes.indexOf(selectEl.value) === -1) codes.push(selectEl.value);
     renderPair(listEl, codes);
+    setDirty(true);
 }
 
 // --- Configuration model ---
@@ -339,6 +342,7 @@ function addSeriesOverride(seriesId, seriesName) {
 
     saveUserPrefsToConfig(currentUserId, prefs);
     renderSeriesOverrides(prefs.SeriesOverrides);
+    setDirty(true);
 }
 
 function removeSeriesOverride(seriesId) {
@@ -351,6 +355,7 @@ function removeSeriesOverride(seriesId) {
     prefs.SeriesOverrides.splice(idx, 1);
     saveUserPrefsToConfig(currentUserId, prefs);
     renderSeriesOverrides(prefs.SeriesOverrides);
+    setDirty(true);
 }
 
 let searchSeq = 0;
@@ -462,6 +467,10 @@ function showStatus(msg, isError) {
     statusTimer = setTimeout(() => { el.className = 'lf-status'; }, 3000);
 }
 
+function setDirty(dirty) {
+    currentView.querySelector('#dirtyIndicator').hidden = !dirty;
+}
+
 function doSave() {
     if (!currentUserId) return;
     saveUserPrefsToConfig(currentUserId, getCurrentPrefs());
@@ -476,6 +485,7 @@ function doSave() {
         .then((config) => {
             currentConfig = config;
             loadUserPrefs();
+            setDirty(false);
             showStatus('Configuration saved.', false);
         })
         .catch((err) => {
@@ -512,6 +522,7 @@ export default function (view) {
                         currentUserId = users[0].Id;
                     }
                     loadUserPrefs();
+                    setDirty(false);
                 });
             })
             .catch((err) => {
@@ -524,6 +535,10 @@ export default function (view) {
         if (currentUserId) saveUserPrefsToConfig(currentUserId, getCurrentPrefs());
         currentUserId = this.value;
         loadUserPrefs();
+    });
+
+    view.addEventListener('change', (e) => {
+        if (e.target.matches('input[type="checkbox"]')) setDirty(true);
     });
 
     // One delegated handler for every language list on the page — the two global
