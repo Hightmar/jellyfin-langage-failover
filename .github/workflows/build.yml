@@ -1,25 +1,26 @@
 name: Build
 
 on:
-  # Not on pushes to main: main only moves to receive a merge that is about to be
-  # tagged, and the release workflow builds and tests the tag before it packages or
-  # publishes anything. Building the merge as well would just run the same commit
-  # twice, seconds apart.
+  # main is built by the release workflow, against the tag.
   push:
     branches: [develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
+  workflow_call:
 
-# The runner image is pinned rather than left on ubuntu-latest, for the same reason the
-# analyzer package is pinned in Directory.Build.props: with -warnaserror, a runner that
-# rolls to a new Ubuntu on its own must not be able to break the build with no commit
-# behind it. ubuntu-latest becomes Ubuntu 26 on 2026-10-19; move this deliberately.
+permissions:
+  contents: read
+
+# Pinned rather than ubuntu-latest: with -warnaserror, a runner upgrade must not break the build.
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -35,12 +36,29 @@ jobs:
       - name: Test
         run: dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build --verbosity normal
 
+      - name: Stage the plugin build
+        run: |
+          mkdir -p plugin-build
+          cp Jellyfin.Plugin.LanguageFailover/bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll plugin-build/
+          cp Jellyfin.Plugin.LanguageFailover/meta.json plugin-build/
+          cp "images/$(jq -r '.imagePath' Jellyfin.Plugin.LanguageFailover/meta.json)" plugin-build/
+
+      - name: Upload the plugin build
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-build
+          path: plugin-build/
+          if-no-files-found: error
+          retention-days: 14
+
   web-tests:
     name: Config page tests
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v7
