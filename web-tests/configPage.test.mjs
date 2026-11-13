@@ -301,3 +301,41 @@ test('series names are escaped rather than injected as markup', async () => {
     assert.equal(title.querySelector('img'), null, 'no element was injected');
     assert.equal(title.textContent, '<img src=x onerror=alert(1)>');
 });
+
+test('series search looks in the selected user\'s libraries', async () => {
+    await boot();
+    const searchedAs = [];
+    global.ApiClient.getItems = (userId) => {
+        searchedAs.push(userId);
+        return Promise.resolve({ Items: [SERIES] });
+    };
+
+    const selectUser = $('#selectUser');
+    selectUser.value = USERS[1].Id;
+    selectUser.dispatchEvent(new window.Event('change'));
+    await addSeriesOverride();
+
+    assert.deepEqual(searchedAs, [USERS[1].Id]);
+});
+
+test('a slow search response never replaces a newer one', async () => {
+    await boot();
+    const pending = [];
+    global.ApiClient.getItems = (_userId, query) => new Promise((resolve) => {
+        pending.push(() => resolve({ Items: [{ Id: SERIES.Id, Name: `Result for ${query.SearchTerm}` }] }));
+    });
+
+    const search = $('#seriesSearchInput');
+    for (const term of ['fri', 'frieren']) {
+        search.value = term;
+        search.dispatchEvent(new window.Event('input'));
+        await new Promise((r) => setTimeout(r, 350));
+    }
+
+    pending[1]();
+    await settle();
+    pending[0]();
+    await settle();
+
+    assert.equal($('#seriesSearchResults').textContent, 'Result for frieren');
+});

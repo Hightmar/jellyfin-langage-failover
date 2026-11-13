@@ -104,7 +104,7 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 
 Below the global preferences, you can add per-series overrides:
 
-1. **Search** for a series by name in the search box
+1. **Search** for a series by name in the search box (it searches the selected user's libraries)
 2. **Click** on the series in the results to add it
 3. **Configure** audio and/or subtitle languages specifically for that series
 4. Leave a field empty to fall back to the global preferences for that field

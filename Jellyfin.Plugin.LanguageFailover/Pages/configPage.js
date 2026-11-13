@@ -352,8 +352,11 @@ function removeSeriesOverride(seriesId) {
     renderSeriesOverrides(prefs.SeriesOverrides);
 }
 
+let searchSeq = 0;
+
 function searchSeries(query) {
     const resultsList = currentView.querySelector('#seriesSearchResults');
+    const seq = ++searchSeq;
     if (!query || query.length < 2) {
         resultsList.style.display = 'none';
         return;
@@ -368,12 +371,13 @@ function searchSeries(query) {
         resultsList.style.display = 'block';
     };
 
-    ApiClient.getItems(ApiClient.getCurrentUserId(), {
+    ApiClient.getItems(currentUserId, {
         SearchTerm: query,
         IncludeItemTypes: 'Series',
         Recursive: true,
         Limit: 10
     }).then((result) => {
+        if (seq !== searchSeq) return;
         if (!result.Items || result.Items.length === 0) {
             showMessage('No series found');
             return;
@@ -394,6 +398,7 @@ function searchSeries(query) {
         });
         resultsList.style.display = 'block';
     }).catch((err) => {
+        if (seq !== searchSeq) return;
         console.error('Language Failover series search error:', err);
         showMessage('Search failed. Check the server logs.');
     });
