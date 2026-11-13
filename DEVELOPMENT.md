@@ -177,7 +177,8 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
   `manifest.json`, and in `meta.json`. Write it for users. (Earlier releases used the tagged
   commit's message, which is why the manifest history contains entries like
   "Merge branch 'develop'"; 1.2.0.0 is the last one affected.)
-- The workflow has four jobs: `prepare` (validates the tag), `tests` (calls `build.yml`),
+- The workflow has four jobs: `prepare` (validates the tag, and the version with
+  `scripts/check_release_version.py`), `tests` (calls `build.yml`),
   `package` (builds the zip) and `publish` (attests, creates the release, updates
   `manifest.json` + `meta.json` on `main`). Only `publish` gets a write token.
 - In the workflows: no `${{ }}` inside `run:` scripts (go through `env:`), and

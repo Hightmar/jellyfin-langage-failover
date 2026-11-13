@@ -78,6 +78,14 @@ jobs:
           echo "Version: $VERSION"
           printf 'Changelog:\n%s\n' "$CHANGELOG"
 
+      # Against main's manifest: the tagged commit's copy can be one release behind.
+      - name: Check the version against the manifest
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          git show origin/main:manifest.json > "$RUNNER_TEMP/manifest.json"
+          MANIFEST_PATH="$RUNNER_TEMP/manifest.json" python3 scripts/check_release_version.py
+
   tests:
     name: Tests
     needs: prepare
