@@ -30,7 +30,7 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 2. It looks up the user's configured language priorities
 3. If the item is a TV episode, it checks for series-specific overrides
 4. It analyzes all available audio/subtitle streams on the media file
-5. **Audio selection**: if "Prefer original audio" is on and a track is tagged as Original/VO, it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
+5. **Audio selection**: if "Prefer original audio" is on and the original version can be identified (container flag, Original/VO title, or the item's original language from its metadata), it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
 6. **Subtitle selection**: the audio language is compared against your subtitle priority list. If the audio ranks at least as highly as the best subtitle language actually present on the file, subtitles are disabled — or switched to forced, when "Show forced subtitles when audio matches" is on. Otherwise the best subtitle track in your priority order is selected
 7. It sends `SetAudioStreamIndex` / `SetSubtitleStreamIndex` commands to the client
 
@@ -96,7 +96,7 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 3. **Audio Language Priority** — Add languages and reorder them by drag-and-drop (or with the up/down arrows). The first available match in the media file wins. Among streams of the same language, surround sound (5.1/7.1) is preferred over stereo.
 4. **Subtitle Language Priority** — Same principle. Subtitles are only activated when they beat the audio: if the audio language ranks at least as highly in this list as the best subtitle track the file actually has, subtitles stay off.
 5. **Prefer non-forced subtitles** — When checked, complete subtitles are preferred over forced (signs/songs only) subtitles — anime *Signs & Songs* / *S&S* tracks included. If only forced subtitles are available, they will still be selected as a fallback. Forced tracks are detected from the container flag as well as the track title, so this works even when the file's forced flag is missing.
-6. **Prefer original audio (VO)** — When checked, a track tagged as Original / VO / Version Originale beats the priority list. Falls back to the priority list if no track is tagged.
+6. **Prefer original audio (VO)** — When checked, the original version beats the priority list, even in a language that is not on it. It is found from the container's original flag, then a title saying Original / VO / Version Originale, then the original language in the item's metadata. Falls back to the priority list if none of these finds a track.
 7. **Show forced subtitles when audio matches your language** — When checked, instead of disabling subtitles in the case where audio already matches one of your subtitle languages, the plugin selects a forced subtitle track in that language if one exists. Useful for translating foreign dialog or on-screen text in an otherwise native-language film, and for keeping the *Signs & Songs* / *S&S* track on a dubbed anime.
 8. **Save**
 

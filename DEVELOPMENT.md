@@ -105,11 +105,12 @@ instead used to switch subtitles on over audio the viewer already understood.
 ### Audio selection
 
 - Among same-language matches, **higher channel count wins** (surround over stereo).
-- `PreferOriginalAudio` uses `OriginalVersionRegex` on the stream **title** (`original`, `VO`,
-  `version originale`) and, when on, beats the priority list; falls back to the list if no
-  tagged track exists. Note that `original` alone subsumes `original audio` / `original
-  language` / `original version` — the `\b` after it matches before the following space — so
-  don't re-add those alternatives.
+- `PreferOriginalAudio`, when on, beats the priority list. `SelectOriginalAudioStream` tries the
+  container's `IsOriginal` flag, then `OriginalVersionRegex` on the stream **title** (`original`,
+  `VO`, `version originale`), then the item's `GetInheritedOriginalLanguage()`; it falls back to
+  the list if none finds a track. Note that `original` alone subsumes `original audio` /
+  `original language` / `original version` — the `\b` after it matches before the following
+  space — so don't re-add those alternatives.
 - `SelectBestAudioStream` and `SelectBestSubtitleStream` share `SelectByLanguagePriority` and
   differ only in their tie-break. Language priority always wins; a tie-break never promotes a
   lower-priority language.
@@ -212,11 +213,22 @@ also unsigned).
 
 ## Version history (behavioural)
 
-- **Unreleased** — Subtitle suppression now respects priority order instead of triggering on any
+- **Unreleased** — The handler no longer holds up the playback start event, and sends nothing
+  once the session has moved on. One Information log line per playback. Series search runs as
+  the selected user; deleted users are pruned on save; unsaved changes are shown. Release
+  workflow split into least-privilege jobs.
+- **1.4.0.0** — "Prefer original audio" falls back to the item's original language from its
+  metadata when no track is flagged or titled as original.
+- **1.3.2.0** — Config page explains what an empty list does. No behaviour change.
+- **1.3.1.1** — Subtitle tracks named just "Signs" / "Signs Only" count as forced.
+- **1.3.1.0** — Anime Signs & Songs tracks count as forced.
+- **1.3.0.0** — Jellyfin 12.x (.NET 10). 10.11 servers stay on 1.2.0.1.
+- **1.2.0.1** — Fix unreadable dropdowns on dark themes.
+- **1.2.0.0** — Subtitle suppression respects priority order instead of triggering on any
   match; the client's default audio track is used for the subtitle decision when no audio command
   is sent; streams are read from the played media source. Config page reworked around DOM
   structure and made theme-aware. Test suites added for both the selection logic and the config
-  page. Release workflow hardened.
+  page.
 - **1.1.0.2** — Fix: forced subtitles detected via title in addition to the `IsForced` flag, with a
   `non-forced` guard; README updated.
 - **1.1.0.0 / 1.1.0.1** — Original-audio preference, forced-subtitle fallback, drag-drop reorder,
