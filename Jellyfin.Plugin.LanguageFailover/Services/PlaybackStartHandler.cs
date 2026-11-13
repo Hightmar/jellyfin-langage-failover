@@ -122,7 +122,7 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
 
         var effectivePrefs = TrackSelectionPlanner.ApplySeriesOverride(prefs, seriesOverride);
 
-        if (seriesOverride is not null && _logger.IsEnabled(LogLevel.Information))
+        if (seriesOverride is not null && _logger.IsEnabled(LogLevel.Debug))
         {
             LogSeriesOverride(
                 seriesOverride.SeriesName,
@@ -202,11 +202,44 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
             }
 
             await ApplySubtitles(plan, prefs, session.Id, itemName).ConfigureAwait(false);
+
+            var (audio, subtitles) = Describe(plan);
+            if ((audio is not null || subtitles is not null) && _logger.IsEnabled(LogLevel.Information))
+            {
+                LogApplied(itemName, audio ?? "unchanged", subtitles ?? "unchanged");
+            }
         }
         catch (Exception ex)
         {
             LogUnhandledError(ex);
         }
+    }
+
+    /// <summary>
+    /// Describes what a plan changes, for the one log line written per playback.
+    /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The audio and subtitle changes, each null when that track is left alone.</returns>
+    public static (string? Audio, string? Subtitles) Describe(TrackSelectionPlan plan)
+    {
+        string? audio = null;
+        if (plan.AudioIndex is int audioIndex)
+        {
+            var language = plan.AudioLanguage ?? "unknown";
+            audio = plan.OriginalSignal is null
+                ? $"#{audioIndex} ({language})"
+                : $"#{audioIndex} ({language}, original via {plan.OriginalSignal})";
+        }
+
+        var subtitles = plan.Subtitle switch
+        {
+            SubtitleAction.Select => $"#{plan.SubtitleIndex}",
+            SubtitleAction.SelectForced => $"#{plan.SubtitleIndex} (forced)",
+            SubtitleAction.Disable => "off",
+            _ => null,
+        };
+
+        return (audio, subtitles);
     }
 
     private async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)

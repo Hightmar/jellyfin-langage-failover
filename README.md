@@ -140,6 +140,7 @@ receives no further fixes, and upgrading the server is the way to get new ones.
 - Verify the user has preferences configured and the plugin is enabled for that user
 - Verify the plugin is loaded: check Jellyfin logs for `Loaded plugin: Language Failover`
 - **Restart the client.** A client that was already open when the plugin was installed or updated can keep running without it, and the symptom is simply that nothing ever changes. Closing and reopening the app fixes it.
+- Each playback the plugin acts on logs one line, e.g. `Language Failover: 'Title': audio #2 (jpn), subtitles off`. No line means it changed nothing.
 - Enable debug logging in Jellyfin (`Logging:LogLevel:Jellyfin.Plugin.LanguageFailover` = `Debug`) to see detailed selection info
 
 ### Subtitles stay forced instead of switching to the complete track
