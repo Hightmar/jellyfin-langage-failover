@@ -5,9 +5,9 @@ Keep this updated when behaviour or workflow changes.
 
 ## Architecture overview
 
-- **`Services/PlaybackStartHandler.cs`** — entry point. Subscribes to `PlaybackStartEventArgs`.
-  Resolves the user's preferences (with per-series overrides), then selects and applies the
-  audio track first, then the subtitle track, via `GeneralCommand`
+- **`Services/PlaybackStartHandler.cs`** — entry point. Subscribes to `PlaybackStartEventArgs`,
+  resolves the user's preferences and the played streams, asks `TrackSelectionPlanner` what to
+  do, then sends the audio command first and the subtitle one second, via `GeneralCommand`
   (`SetAudioStreamIndex` / `SetSubtitleStreamIndex`) over WebSocket. All commands go through
   `SendStreamIndexCommand`.
   - Timing matters: `PlayerInitDelay` (1500 ms) before sending anything and
@@ -17,6 +17,8 @@ Keep this updated when behaviour or workflow changes.
     `eventArgs.Item.Id`. An item with several versions has one `BaseItem` per file, so the
     session may be on a different one than `Item`; `MediaSourceId` is also not a Guid for live
     streams, hence the fallback.
+- **`Services/TrackSelectionPlanner.cs`** — pure decision for one playback: series override,
+  audio index, and what to do with subtitles (`SubtitleAction`). No I/O, no timing.
 - **`Services/LanguageHelper.cs`** — pure, static selection logic. No I/O. This is where stream
   matching/scoring lives and where most behaviour bugs are fixed.
 - **`Configuration/`** — `PluginConfiguration` holds a list of `UserLanguagePreference`, each with
@@ -28,8 +30,8 @@ Keep this updated when behaviour or workflow changes.
 
 Two suites, both run in CI (`.github/workflows/build.yml`):
 
-- **`Jellyfin.Plugin.LanguageFailover.Tests/`** (xUnit) covers `LanguageHelper` and plugin
-  identity. `FakeLocalizationManager` implements `ILocalizationManager` over a small ISO table;
+- **`Jellyfin.Plugin.LanguageFailover.Tests/`** (xUnit) covers `LanguageHelper`,
+  `TrackSelectionPlanner` and plugin identity. `FakeLocalizationManager` implements `ILocalizationManager` over a small ISO table;
   every member the selection logic does not use throws, so a new dependency shows up as a test
   failure rather than silently passing.
   - `PluginIdentityTests` guards the GUID, which is restated in `Plugin.cs`, `meta.json`,
