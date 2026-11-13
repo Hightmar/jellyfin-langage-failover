@@ -170,22 +170,29 @@ Some clients may override the plugin's selection with their own defaults. The pl
 
 ## Releasing (maintainers)
 
-Releases are automated via GitHub Actions. To publish a new version:
+Releases are automated via GitHub Actions. Push an annotated tag whose message is the changelog:
 
 ```bash
-git tag v1.1.0.1 -m "Release 1.1.0.1"
-git push origin v1.1.0.1
+git tag -a v1.4.0.1 -F release-notes.md --cleanup=verbatim
+git push origin v1.4.0.1
 ```
 
 The workflow will:
-1. Build the plugin in Release mode
-2. Package the DLL and meta.json as `language-failover_<version>.zip`
-3. Create a GitHub Release with the ZIP attached
-4. Update `manifest.json` on `main` with the new version entry and commit it back
+1. Check the tag (four numeric segments, on `main`, annotated)
+2. Run both test suites
+3. Package the DLL, meta.json and image as `language-failover_<version>.zip`
+4. Create a GitHub Release with the ZIP and a build provenance attestation
+5. Update `manifest.json` and `meta.json` on `main` and commit them back
 
 Users subscribed to the repository will see the new version in their Jellyfin plugin catalog.
 
 Version numbers must follow the format `major.minor.patch.build` (four segments, as required by Jellyfin).
+
+To check that a ZIP was built by this repository's release workflow:
+
+```bash
+gh attestation verify language-failover_1.4.0.1.zip --repo Hightmar/jellyfin-langage-failover
+```
 
 ## License
 
