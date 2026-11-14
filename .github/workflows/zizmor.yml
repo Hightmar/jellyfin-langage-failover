@@ -1,9 +1,6 @@
 name: Workflow audit
 
 on:
-  push:
-    branches: [main, develop]
-    paths: ['.github/**']
   pull_request:
     paths: ['.github/**']
   workflow_dispatch:

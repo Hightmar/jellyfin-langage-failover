@@ -1,11 +1,8 @@
 name: Build
 
 on:
-  # main is built by the release workflow, against the tag.
-  push:
-    branches: [develop]
+  # No push trigger: pull requests are the gate, and the release workflow re-tests the tag.
   pull_request:
-    branches: [main, develop]
   workflow_dispatch:
   workflow_call:
 

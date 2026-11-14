@@ -169,9 +169,10 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
 
 ## Branch & release workflow
 
-- Work on **`develop`**; merge into **`main`** for releases. (Note: `README.md` on `main` has been
-  ahead of `develop` in the past — when editing docs on `develop`, base them on `main`'s version to
-  avoid losing content on merge.)
+- Work on **`develop`** through pull requests; merge `develop` into **`main`** directly (no PR)
+  for releases, then tag. After the release bot commits to `main`, fast-forward `develop` to it.
+- CI runs on pull requests and once more on the release tag. Pushes run nothing, so the same
+  commit is not tested twice. CodeQL also runs weekly.
 - Releases are automated by GitHub Actions on a tag push:
   ```bash
   git tag -a v1.1.0.3 -F release-notes.md --cleanup=verbatim
