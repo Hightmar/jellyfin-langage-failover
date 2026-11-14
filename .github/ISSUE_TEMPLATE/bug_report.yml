@@ -1,0 +1,51 @@
+name: Bug report
+description: The plugin picked the wrong track, or none at all
+labels: [bug]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Jellyfin and plugin versions
+      placeholder: Jellyfin 12.0.1, Language Failover 1.4.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      placeholder: Jellyfin for Android TV 0.18, on a Shield
+    validations:
+      required: true
+
+  - type: textarea
+    id: preferences
+    attributes:
+      label: Your settings
+      description: Audio and subtitle lists, the toggles, and any series override for this item.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tracks
+    attributes:
+      label: Tracks in the file
+      description: From the item's Media Info — each audio and subtitle track with its language, title and flags.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Lines containing "Language Failover" for that playback, ideally with
+        Logging:LogLevel:Jellyfin.Plugin.LanguageFailover set to Debug.
+      render: text

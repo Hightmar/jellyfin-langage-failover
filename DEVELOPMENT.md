@@ -5,18 +5,24 @@ Keep this updated when behaviour or workflow changes.
 
 ## Architecture overview
 
-- **`Services/PlaybackStartHandler.cs`** — entry point. Subscribes to `PlaybackStartEventArgs`.
-  Resolves the user's preferences (with per-series overrides), then selects and applies the
-  audio track first, then the subtitle track, via `GeneralCommand`
+- **`Services/PlaybackStartHandler.cs`** — entry point. Subscribes to `PlaybackStartEventArgs`,
+  resolves the user's preferences and the played streams, asks `TrackSelectionPlanner` what to
+  do, then sends the audio command first and the subtitle one second, via `GeneralCommand`
   (`SetAudioStreamIndex` / `SetSubtitleStreamIndex`) over WebSocket. All commands go through
   `SendStreamIndexCommand`.
   - Timing matters: `PlayerInitDelay` (1500 ms) before sending anything and
     `BetweenCommandsDelay` (500 ms) between the audio and subtitle commands. Some clients
     revert selections if commands arrive too early. Don't lower these without testing on TV apps.
+  - The delays run detached: `OnEvent` returns at once, because Jellyfin awaits each consumer in
+    turn while the client's `POST /Sessions/Playing` waits for its response.
+  - After each delay, `IsStillPlaying` checks the session is still on the same item and media
+    source; if it moved on (next episode, stop, other version), nothing more is sent.
   - Streams are read for `eventArgs.MediaSourceId` when it parses as a Guid, falling back to
     `eventArgs.Item.Id`. An item with several versions has one `BaseItem` per file, so the
     session may be on a different one than `Item`; `MediaSourceId` is also not a Guid for live
     streams, hence the fallback.
+- **`Services/TrackSelectionPlanner.cs`** — pure decision for one playback: series override,
+  audio index, and what to do with subtitles (`SubtitleAction`). No I/O, no timing.
 - **`Services/LanguageHelper.cs`** — pure, static selection logic. No I/O. This is where stream
   matching/scoring lives and where most behaviour bugs are fixed.
 - **`Configuration/`** — `PluginConfiguration` holds a list of `UserLanguagePreference`, each with
@@ -28,8 +34,8 @@ Keep this updated when behaviour or workflow changes.
 
 Two suites, both run in CI (`.github/workflows/build.yml`):
 
-- **`Jellyfin.Plugin.LanguageFailover.Tests/`** (xUnit) covers `LanguageHelper` and plugin
-  identity. `FakeLocalizationManager` implements `ILocalizationManager` over a small ISO table;
+- **`Jellyfin.Plugin.LanguageFailover.Tests/`** (xUnit) covers `LanguageHelper`,
+  `TrackSelectionPlanner` and plugin identity. `FakeLocalizationManager` implements `ILocalizationManager` over a small ISO table;
   every member the selection logic does not use throws, so a new dependency shows up as a test
   failure rather than silently passing.
   - `PluginIdentityTests` guards the GUID, which is restated in `Plugin.cs`, `meta.json`,
@@ -99,11 +105,12 @@ instead used to switch subtitles on over audio the viewer already understood.
 ### Audio selection
 
 - Among same-language matches, **higher channel count wins** (surround over stereo).
-- `PreferOriginalAudio` uses `OriginalVersionRegex` on the stream **title** (`original`, `VO`,
-  `version originale`) and, when on, beats the priority list; falls back to the list if no
-  tagged track exists. Note that `original` alone subsumes `original audio` / `original
-  language` / `original version` — the `\b` after it matches before the following space — so
-  don't re-add those alternatives.
+- `PreferOriginalAudio`, when on, beats the priority list. `SelectOriginalAudioStream` tries the
+  container's `IsOriginal` flag, then `OriginalVersionRegex` on the stream **title** (`original`,
+  `VO`, `version originale`), then the item's `GetInheritedOriginalLanguage()`; it falls back to
+  the list if none finds a track. Note that `original` alone subsumes `original audio` /
+  `original language` / `original version` — the `\b` after it matches before the following
+  space — so don't re-add those alternatives.
 - `SelectBestAudioStream` and `SelectBestSubtitleStream` share `SelectByLanguagePriority` and
   differ only in their tie-break. Language priority always wins; a tie-break never promotes a
   lower-priority language.
@@ -141,6 +148,9 @@ Shared MSBuild properties live in `Directory.Build.props`; package versions are 
 `dotnet-version` in both workflows and the `net10.0` path in the release workflow's packaging
 step all move with it. CI builds with `-warnaserror`, so keep the tree warning-clean.
 
+Resolved package versions are locked in each project's `packages.lock.json` and CI restores with
+`--locked-mode`: commit the lock files whenever a package changes.
+
 **The analyzer set is a pinned NuGet package** (`Microsoft.CodeAnalysis.NetAnalyzers` in
 `Directory.Packages.props`), not whatever the installed SDK ships, and `global.json` pins the
 SDK feature band. This is deliberate: with `-warnaserror`, an SDK upgrade on the GitHub runner
@@ -177,8 +187,16 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
   `manifest.json`, and in `meta.json`. Write it for users. (Earlier releases used the tagged
   commit's message, which is why the manifest history contains entries like
   "Merge branch 'develop'"; 1.2.0.0 is the last one affected.)
-- The workflow builds, runs both test suites, packages `language-failover_<version>.zip`, creates
-  the GitHub Release, and updates `manifest.json` + `meta.json` on `main`.
+- The workflow has four jobs: `prepare` (validates the tag, and the version with
+  `scripts/check_release_version.py`), `tests` (calls `build.yml`),
+  `package` (builds the zip) and `publish` (attests, creates the release, updates
+  `manifest.json` + `meta.json` on `main`). Only `publish` gets a write token.
+- In the workflows: no `${{ }}` inside `run:` scripts (go through `env:`),
+  `persist-credentials: false` on every checkout, and actions pinned to a commit SHA
+  (`@<sha> # vX.Y.Z`). Dependabot keeps the pins up to date. `zizmor.yml` audits every change
+  under `.github/`; run it locally with `uvx zizmor .`.
+- If `publish` fails after creating the release, delete the release (keep the tag) and re-run
+  the failed jobs.
 - **Don't hand-edit `manifest.json`.** `scripts/update_manifest.py` writes it, reading the plugin's
   identity (guid, name, description, overview, category, owner, image, targetAbi) from `meta.json` —
   `meta.json` is the single source of truth. `scripts/set_meta_version.py` stamps the version and
@@ -195,11 +213,22 @@ also unsigned).
 
 ## Version history (behavioural)
 
-- **Unreleased** — Subtitle suppression now respects priority order instead of triggering on any
+- **Unreleased** — The handler no longer holds up the playback start event, and sends nothing
+  once the session has moved on. One Information log line per playback. Series search runs as
+  the selected user; deleted users are pruned on save; unsaved changes are shown. Release
+  workflow split into least-privilege jobs.
+- **1.4.0.0** — "Prefer original audio" falls back to the item's original language from its
+  metadata when no track is flagged or titled as original.
+- **1.3.2.0** — Config page explains what an empty list does. No behaviour change.
+- **1.3.1.1** — Subtitle tracks named just "Signs" / "Signs Only" count as forced.
+- **1.3.1.0** — Anime Signs & Songs tracks count as forced.
+- **1.3.0.0** — Jellyfin 12.x (.NET 10). 10.11 servers stay on 1.2.0.1.
+- **1.2.0.1** — Fix unreadable dropdowns on dark themes.
+- **1.2.0.0** — Subtitle suppression respects priority order instead of triggering on any
   match; the client's default audio track is used for the subtitle decision when no audio command
   is sent; streams are read from the played media source. Config page reworked around DOM
   structure and made theme-aware. Test suites added for both the selection logic and the config
-  page. Release workflow hardened.
+  page.
 - **1.1.0.2** — Fix: forced subtitles detected via title in addition to the `IsForced` flag, with a
   `non-forced` guard; README updated.
 - **1.1.0.0 / 1.1.0.1** — Original-audio preference, forced-subtitle fallback, drag-drop reorder,

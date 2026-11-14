@@ -5,56 +5,57 @@ on:
     tags:
       - 'v*.*.*.*'
 
-permissions:
-  contents: write
+permissions: {}
 
-# The runner image is pinned rather than left on ubuntu-latest, for the same reason the
-# analyzer package is pinned in Directory.Build.props: with -warnaserror, a runner that
-# rolls to a new Ubuntu on its own must not be able to break the build with no commit
-# behind it. ubuntu-latest becomes Ubuntu 26 on 2026-10-19; move this deliberately.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release:
+  prepare:
+    name: Validate the tag
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      timestamp: ${{ steps.meta.outputs.timestamp }}
+      changelog: ${{ steps.meta.outputs.changelog }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Verify tag is on main
+      - name: Check the tag name
         run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
-            echo "Error: tag ${{ github.ref_name }} is not on the main branch"
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The tag must look like v1.4.0.0."
             exit 1
           fi
-          echo "Tag is on main — proceeding with release"
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          dotnet-version: 10.0.x
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the tag is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not on the main branch."
+            exit 1
+          fi
 
       - name: Read version and changelog from the tag
         id: meta
-        env:
-          TAG: ${{ github.ref_name }}
         run: |
+          TAG="$GITHUB_REF_NAME"
           VERSION="${TAG#v}"
 
-          # Make sure the tag *object* is local, not just the commit it points at.
           git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
 
-          # The release note is the annotated tag's message. A lightweight tag has no
-          # message of its own, and `git tag --format='%(contents)'` silently falls
-          # through to the tagged commit's message for one — which is how "Merge branch
-          # 'develop'" reached the plugin catalogue. Refuse to publish instead: the
-          # changelog is user-facing and must be written on purpose.
+          # The changelog is the tag message; a lightweight tag would fall back to the commit message.
           if [ "$(git cat-file -t "$TAG")" != "tag" ]; then
             echo "::error::Tag ${TAG} is lightweight, so it carries no release note."
             echo "Re-create it as an annotated tag, then push it again:"
             echo "    git tag -d ${TAG} && git push origin :refs/tags/${TAG}"
-            echo "    git tag -a ${TAG} -F release-notes.md"
+            echo "    git tag -a ${TAG} -F release-notes.md --cleanup=verbatim"
             echo "    git push origin ${TAG}"
             exit 1
           fi
@@ -65,79 +66,145 @@ jobs:
             exit 1
           fi
 
+          DELIMITER="CHANGELOG_$(openssl rand -hex 16)"
           {
             echo "version=$VERSION"
             echo "timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "changelog<<CHANGELOG_EOF"
+            echo "changelog<<$DELIMITER"
             printf '%s\n' "$CHANGELOG"
-            echo "CHANGELOG_EOF"
+            echo "$DELIMITER"
           } >> "$GITHUB_OUTPUT"
 
           echo "Version: $VERSION"
           printf 'Changelog:\n%s\n' "$CHANGELOG"
 
-      - name: Stamp meta.json for the packaged build
+      # Against main's manifest: the tagged commit's copy can be one release behind.
+      - name: Check the version against the manifest
         env:
           VERSION: ${{ steps.meta.outputs.version }}
-          TIMESTAMP: ${{ steps.meta.outputs.timestamp }}
-          CHANGELOG: ${{ steps.meta.outputs.changelog }}
+        run: |
+          git show origin/main:manifest.json > "$RUNNER_TEMP/manifest.json"
+          MANIFEST_PATH="$RUNNER_TEMP/manifest.json" python3 scripts/check_release_version.py
+
+  tests:
+    name: Tests
+    needs: prepare
+    permissions:
+      contents: read
+    uses: $/.github/workflows/build.yml
+
+  package:
+    name: Build the release zip
+    needs: [prepare, tests]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      zip_name: ${{ steps.package.outputs.zip_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Stamp meta.json for the packaged build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TIMESTAMP: ${{ needs.prepare.outputs.timestamp }}
+          CHANGELOG: ${{ needs.prepare.outputs.changelog }}
         run: python3 scripts/set_meta_version.py
 
-      - name: Build and test
+      - name: Build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          dotnet restore Jellyfin.Plugin.LanguageFailover.sln
+          dotnet restore Jellyfin.Plugin.LanguageFailover.sln --locked-mode
           dotnet build Jellyfin.Plugin.LanguageFailover.sln \
             --configuration Release \
             --no-restore \
             -warnaserror \
-            -p:Version=${{ steps.meta.outputs.version }}
-          dotnet test Jellyfin.Plugin.LanguageFailover.sln --configuration Release --no-build
+            "-p:Version=${VERSION}"
 
       - name: Package
         id: package
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p release
           cp Jellyfin.Plugin.LanguageFailover/bin/Release/net10.0/Jellyfin.Plugin.LanguageFailover.dll release/
           cp Jellyfin.Plugin.LanguageFailover/meta.json release/
-          # meta.json's imagePath is resolved against the plugin folder, so the image
-          # ships beside it; that is what "My Plugins" shows once installed.
           IMAGE="$(jq -r '.imagePath' Jellyfin.Plugin.LanguageFailover/meta.json)"
           cp "images/${IMAGE}" release/
           cd release
           ZIP_NAME="language-failover_${VERSION}.zip"
           zip "$ZIP_NAME" Jellyfin.Plugin.LanguageFailover.dll meta.json "$IMAGE"
-          CHECKSUM=$(md5sum "$ZIP_NAME" | awk '{print $1}')
-          {
-            echo "zip_name=$ZIP_NAME"
-            echo "checksum=$CHECKSUM"
-          } >> "$GITHUB_OUTPUT"
-          echo "Checksum: $CHECKSUM"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          sha256sum "$ZIP_NAME"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload the release zip
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Language Failover ${{ steps.meta.outputs.version }}
-          body: ${{ steps.meta.outputs.changelog }}
-          files: release/${{ steps.package.outputs.zip_name }}
-          draft: false
-          prerelease: false
+          name: release-zip
+          path: release/${{ steps.package.outputs.zip_name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish
+    needs: [prepare, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Download the release zip
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: release
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/${{ needs.package.outputs.zip_name }}
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANGELOG: ${{ needs.prepare.outputs.changelog }}
+          ZIP_NAME: ${{ needs.package.outputs.zip_name }}
+        run: |
+          printf '%s\n' "$CHANGELOG" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$GITHUB_REF_NAME" "release/${ZIP_NAME}" \
+            --verify-tag \
+            --title "Language Failover ${VERSION}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Update manifest.json and meta.json on main
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
-          CHANGELOG: ${{ steps.meta.outputs.changelog }}
-          TIMESTAMP: ${{ steps.meta.outputs.timestamp }}
-          CHECKSUM: ${{ steps.package.outputs.checksum }}
-          SOURCE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.package.outputs.zip_name }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANGELOG: ${{ needs.prepare.outputs.changelog }}
+          TIMESTAMP: ${{ needs.prepare.outputs.timestamp }}
+          ZIP_NAME: ${{ needs.package.outputs.zip_name }}
         run: |
-          # The stamped meta.json is already inside the published zip; regenerate it
-          # on main rather than carrying the working-tree copy across the checkout.
-          git restore Jellyfin.Plugin.LanguageFailover/meta.json
-          git checkout main
-          git pull origin main
+          CHECKSUM="$(md5sum "release/${ZIP_NAME}" | cut -d' ' -f1)"
+          SOURCE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+          export CHECKSUM SOURCE_URL
 
           python3 scripts/set_meta_version.py
           python3 scripts/update_manifest.py
@@ -149,5 +216,6 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Release ${VERSION}: update manifest and meta.json"
-            git push origin main
+            AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH}" push origin main
           fi

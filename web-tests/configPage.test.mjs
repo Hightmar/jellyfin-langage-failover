@@ -301,3 +301,83 @@ test('series names are escaped rather than injected as markup', async () => {
     assert.equal(title.querySelector('img'), null, 'no element was injected');
     assert.equal(title.textContent, '<img src=x onerror=alert(1)>');
 });
+
+test('series search looks in the selected user\'s libraries', async () => {
+    await boot();
+    const searchedAs = [];
+    global.ApiClient.getItems = (userId) => {
+        searchedAs.push(userId);
+        return Promise.resolve({ Items: [SERIES] });
+    };
+
+    const selectUser = $('#selectUser');
+    selectUser.value = USERS[1].Id;
+    selectUser.dispatchEvent(new window.Event('change'));
+    await addSeriesOverride();
+
+    assert.deepEqual(searchedAs, [USERS[1].Id]);
+});
+
+test('a slow search response never replaces a newer one', async () => {
+    await boot();
+    const pending = [];
+    global.ApiClient.getItems = (_userId, query) => new Promise((resolve) => {
+        pending.push(() => resolve({ Items: [{ Id: SERIES.Id, Name: `Result for ${query.SearchTerm}` }] }));
+    });
+
+    const search = $('#seriesSearchInput');
+    for (const term of ['fri', 'frieren']) {
+        search.value = term;
+        search.dispatchEvent(new window.Event('input'));
+        await new Promise((r) => setTimeout(r, 350));
+    }
+
+    pending[1]();
+    await settle();
+    pending[0]();
+    await settle();
+
+    assert.equal($('#seriesSearchResults').textContent, 'Result for frieren');
+});
+
+test('saving drops the preferences of users that no longer exist', async () => {
+    stored = {
+        UserPreferences: [
+            { UserId: 'aaaaaaaabbbbccccddddeeeeeeeeeeee', AudioLanguages: ['ja'], SubtitleLanguages: [], SeriesOverrides: [] },
+            { UserId: '99999999999999999999999999999999', AudioLanguages: ['fr'], SubtitleLanguages: [], SeriesOverrides: [] },
+        ],
+    };
+    await boot();
+
+    click($('#btnSave'));
+    await settle();
+
+    const ids = saved.UserPreferences.map((p) => p.UserId);
+    assert.ok(ids.includes('aaaaaaaabbbbccccddddeeeeeeeeeeee'));
+    assert.ok(!ids.includes('99999999999999999999999999999999'));
+});
+
+test('the page says when there are unsaved changes, until they are saved', async () => {
+    await boot();
+    assert.equal($('#dirtyIndicator').hidden, true, 'clean after loading');
+
+    addLanguages($('#audioLangList'), ['ja']);
+    assert.equal($('#dirtyIndicator').hidden, false, 'dirty after an edit');
+
+    click($('#btnSave'));
+    await settle();
+    assert.equal($('#dirtyIndicator').hidden, true, 'clean after saving');
+});
+
+test('toggles and series overrides count as unsaved changes', async () => {
+    await boot();
+    const toggle = $('#chkPreferOriginal');
+    toggle.checked = !toggle.checked;
+    toggle.dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert.equal($('#dirtyIndicator').hidden, false, 'a toggle');
+
+    click($('#btnSave'));
+    await settle();
+    await addSeriesOverride();
+    assert.equal($('#dirtyIndicator').hidden, false, 'an override');
+});

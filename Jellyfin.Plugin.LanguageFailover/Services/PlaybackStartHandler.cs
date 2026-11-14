@@ -4,7 +4,6 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Logging;
@@ -17,22 +16,13 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArgs>
 {
     /// <summary>
-    /// How long to wait after PlaybackStart before touching the client's track selection.
-    /// Some clients (notably TV apps) are not done initialising their player when the event
-    /// fires and silently revert commands that arrive too early. Do not lower without
-    /// testing on a real TV client.
+    /// Some clients (notably TV apps) revert commands that arrive before their player is ready.
+    /// Do not lower without testing on a real TV client.
     /// </summary>
     private static readonly TimeSpan PlayerInitDelay = TimeSpan.FromMilliseconds(1500);
 
-    /// <summary>
-    /// How long to wait between the audio and subtitle commands, so the client has finished
-    /// applying the audio switch before the subtitle one arrives.
-    /// </summary>
     private static readonly TimeSpan BetweenCommandsDelay = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>
-    /// The stream index Jellyfin clients interpret as "no subtitle track".
-    /// </summary>
     private const int SubtitlesDisabledIndex = -1;
 
     private readonly ISessionManager _sessionManager;
@@ -56,127 +46,168 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
     }
 
     /// <inheritdoc />
-    public async Task OnEvent(PlaybackStartEventArgs eventArgs)
+    public Task OnEvent(PlaybackStartEventArgs eventArgs)
     {
         try
         {
-            if (eventArgs.Item is null || eventArgs.Session is null)
-            {
-                return;
-            }
+            Handle(eventArgs);
+        }
+        catch (Exception ex)
+        {
+            LogUnhandledError(ex);
+        }
 
-            if (eventArgs.Users is null || eventArgs.Users.Count == 0)
-            {
-                return;
-            }
+        return Task.CompletedTask;
+    }
 
-            var config = Plugin.Instance?.Configuration;
-            if (config is null)
-            {
-                return;
-            }
+    /// <summary>
+    /// Whether the session still plays the item and source a playback start was raised for.
+    /// </summary>
+    /// <param name="nowPlayingItemId">The session's current item, or null when stopped.</param>
+    /// <param name="nowPlayingMediaSourceId">The session's current media source, if known.</param>
+    /// <param name="itemId">The item the event was raised for.</param>
+    /// <param name="mediaSourceId">The media source the event was raised for, if known.</param>
+    /// <returns>False once the session has stopped or moved on to another item or version.</returns>
+    public static bool IsStillPlaying(Guid? nowPlayingItemId, string? nowPlayingMediaSourceId, Guid itemId, string? mediaSourceId)
+    {
+        if (nowPlayingItemId != itemId)
+        {
+            return false;
+        }
 
-            var userId = eventArgs.Users[0].Id;
-            var userKey = userId.ToString("N");
+        if (string.IsNullOrEmpty(nowPlayingMediaSourceId) || string.IsNullOrEmpty(mediaSourceId))
+        {
+            return true;
+        }
 
-            var prefs = config.UserPreferences.Find(p => string.Equals(p.UserId, userKey, StringComparison.OrdinalIgnoreCase));
-            if (prefs is null || !prefs.Enabled)
-            {
-                return;
-            }
+        return Guid.TryParse(nowPlayingMediaSourceId, out var now) && Guid.TryParse(mediaSourceId, out var started)
+            ? now == started
+            : string.Equals(nowPlayingMediaSourceId, mediaSourceId, StringComparison.OrdinalIgnoreCase);
+    }
 
-            // Check for series-specific overrides
-            var audioLangs = prefs.AudioLanguages;
-            var subtitleLangs = prefs.SubtitleLanguages;
+    private static bool IsStillPlaying(SessionInfo session, Guid itemId, string? mediaSourceId)
+        => IsStillPlaying(session.NowPlayingItem?.Id, session.PlayState?.MediaSourceId, itemId, mediaSourceId);
 
-            if (eventArgs.Item is Episode episode && episode.Series is not null)
-            {
-                var seriesKey = episode.Series.Id.ToString("N");
-                var seriesOverride = prefs.SeriesOverrides.Find(
-                    o => string.Equals(o.SeriesId, seriesKey, StringComparison.OrdinalIgnoreCase));
+    private void Handle(PlaybackStartEventArgs eventArgs)
+    {
+        if (eventArgs.Item is null || eventArgs.Session is null)
+        {
+            return;
+        }
 
-                if (seriesOverride is not null)
-                {
-                    if (seriesOverride.AudioLanguages.Count > 0)
-                    {
-                        audioLangs = seriesOverride.AudioLanguages;
-                    }
+        if (eventArgs.Users is null || eventArgs.Users.Count == 0)
+        {
+            return;
+        }
 
-                    if (seriesOverride.SubtitleLanguages.Count > 0)
-                    {
-                        subtitleLangs = seriesOverride.SubtitleLanguages;
-                    }
+        var config = Plugin.Instance?.Configuration;
+        if (config is null)
+        {
+            return;
+        }
 
-                    if (_logger.IsEnabled(LogLevel.Information))
-                    {
-                        LogSeriesOverride(
-                            seriesOverride.SeriesName,
-                            string.Join(", ", audioLangs),
-                            string.Join(", ", subtitleLangs));
-                    }
-                }
-            }
+        var userKey = eventArgs.Users[0].Id.ToString("N");
 
-            if (audioLangs.Count == 0 && subtitleLangs.Count == 0)
-            {
-                return;
-            }
+        var prefs = config.UserPreferences.Find(p => string.Equals(p.UserId, userKey, StringComparison.OrdinalIgnoreCase));
+        if (prefs is null || !prefs.Enabled)
+        {
+            return;
+        }
 
-            // Prefer the media source actually being played: an item with several
-            // versions has one BaseItem per file, and the session may be on a
-            // different one than eventArgs.Item. MediaSourceId is not a Guid for
-            // live streams, in which case the item's own streams are the right ones.
-            var streamOwnerId = Guid.TryParse(eventArgs.MediaSourceId, out var mediaSourceId) && mediaSourceId != Guid.Empty
-                ? mediaSourceId
-                : eventArgs.Item.Id;
+        SeriesLanguageOverride? seriesOverride = null;
+        if (eventArgs.Item is Episode episode && episode.Series is not null)
+        {
+            seriesOverride = TrackSelectionPlanner.FindSeriesOverride(prefs, episode.Series.Id);
+        }
 
-            var streams = _mediaSourceManager.GetMediaStreams(streamOwnerId);
-            if (streams.Count == 0 && streamOwnerId != eventArgs.Item.Id)
-            {
-                streams = _mediaSourceManager.GetMediaStreams(eventArgs.Item.Id);
-            }
+        var effectivePrefs = TrackSelectionPlanner.ApplySeriesOverride(prefs, seriesOverride);
 
-            if (streams.Count == 0)
-            {
-                LogNoStreams(eventArgs.Item.Id);
-                return;
-            }
+        if (seriesOverride is not null && _logger.IsEnabled(LogLevel.Debug))
+        {
+            LogSeriesOverride(
+                seriesOverride.SeriesName,
+                string.Join(", ", effectivePrefs.AudioLanguages),
+                string.Join(", ", effectivePrefs.SubtitleLanguages));
+        }
 
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                LogProcessing(
-                    eventArgs.Item.Name,
-                    userKey,
-                    string.Join(", ", audioLangs),
-                    string.Join(", ", subtitleLangs));
-            }
+        if (effectivePrefs.AudioLanguages.Count == 0 && effectivePrefs.SubtitleLanguages.Count == 0)
+        {
+            return;
+        }
 
-            // Build an effective prefs object with potentially overridden languages
-            var effectivePrefs = new UserLanguagePreference
-            {
-                AudioLanguages = audioLangs.ToList(),
-                SubtitleLanguages = subtitleLangs.ToList(),
-                PreferNonForcedSubtitles = prefs.PreferNonForcedSubtitles,
-                PreferOriginalAudio = prefs.PreferOriginalAudio,
-                PreferForcedWhenAudioMatches = prefs.PreferForcedWhenAudioMatches
-            };
+        // An item with several versions has one BaseItem per file, and the session may be on
+        // another one than eventArgs.Item. MediaSourceId is not a Guid for live streams.
+        var streamOwnerId = Guid.TryParse(eventArgs.MediaSourceId, out var mediaSourceId) && mediaSourceId != Guid.Empty
+            ? mediaSourceId
+            : eventArgs.Item.Id;
 
-            // The item knows its original language even when not one track says so; an
-            // episode inherits it from its series. Read once, used only if the viewer asked
-            // for original audio and no track identified itself.
-            var originalLanguage = eventArgs.Item.GetInheritedOriginalLanguage();
+        var streams = _mediaSourceManager.GetMediaStreams(streamOwnerId);
+        if (streams.Count == 0 && streamOwnerId != eventArgs.Item.Id)
+        {
+            streams = _mediaSourceManager.GetMediaStreams(eventArgs.Item.Id);
+        }
 
-            var sessionId = eventArgs.Session.Id;
+        if (streams.Count == 0)
+        {
+            LogNoStreams(eventArgs.Item.Id);
+            return;
+        }
 
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            LogProcessing(
+                eventArgs.Item.Name,
+                userKey,
+                string.Join(", ", effectivePrefs.AudioLanguages),
+                string.Join(", ", effectivePrefs.SubtitleLanguages));
+        }
+
+        var plan = TrackSelectionPlanner.Plan(
+            streams,
+            effectivePrefs,
+            eventArgs.Item.GetInheritedOriginalLanguage(),
+            _localizationManager);
+
+        // Jellyfin awaits each consumer while the client's playback report waits for its response,
+        // so the delayed part runs detached.
+        _ = ApplyPlanAsync(plan, effectivePrefs, eventArgs.Session, eventArgs.Item.Id, eventArgs.Item.Name, eventArgs.MediaSourceId);
+    }
+
+    private async Task ApplyPlanAsync(
+        TrackSelectionPlan plan,
+        UserLanguagePreference prefs,
+        SessionInfo session,
+        Guid itemId,
+        string? itemName,
+        string? mediaSourceId)
+    {
+        try
+        {
             await Task.Delay(PlayerInitDelay).ConfigureAwait(false);
 
-            // Audio stream selection — returns the language of the selected audio stream
-            var selectedAudioLang = await TrySetAudioStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name, originalLanguage).ConfigureAwait(false);
+            if (!IsStillPlaying(session, itemId, mediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplyAudio(plan, prefs, session.Id, itemName).ConfigureAwait(false);
 
             await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
 
-            // Subtitle stream selection — uses audio language to decide behavior
-            await TrySetSubtitleStream(streams, effectivePrefs, sessionId, eventArgs.Item.Name, selectedAudioLang).ConfigureAwait(false);
+            if (!IsStillPlaying(session, itemId, mediaSourceId))
+            {
+                LogPlaybackMovedOn(itemName);
+                return;
+            }
+
+            await ApplySubtitles(plan, prefs, session.Id, itemName).ConfigureAwait(false);
+
+            var (audio, subtitles) = Describe(plan);
+            if ((audio is not null || subtitles is not null) && _logger.IsEnabled(LogLevel.Information))
+            {
+                LogApplied(itemName, audio ?? "unchanged", subtitles ?? "unchanged");
+            }
         }
         catch (Exception ex)
         {
@@ -185,8 +216,79 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
     }
 
     /// <summary>
-    /// Sends a track-selection command to the client. Index -1 disables the track.
+    /// Describes what a plan changes, for the one log line written per playback.
     /// </summary>
+    /// <param name="plan">The plan.</param>
+    /// <returns>The audio and subtitle changes, each null when that track is left alone.</returns>
+    public static (string? Audio, string? Subtitles) Describe(TrackSelectionPlan plan)
+    {
+        string? audio = null;
+        if (plan.AudioIndex is int audioIndex)
+        {
+            var language = plan.AudioLanguage ?? "unknown";
+            audio = plan.OriginalSignal is null
+                ? $"#{audioIndex} ({language})"
+                : $"#{audioIndex} ({language}, original via {plan.OriginalSignal})";
+        }
+
+        var subtitles = plan.Subtitle switch
+        {
+            SubtitleAction.Select => $"#{plan.SubtitleIndex}",
+            SubtitleAction.SelectForced => $"#{plan.SubtitleIndex} (forced)",
+            SubtitleAction.Disable => "off",
+            _ => null,
+        };
+
+        return (audio, subtitles);
+    }
+
+    private async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)
+    {
+        if (plan.AudioIndex is not int index)
+        {
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                LogNoAudioSelected(itemName, string.Join(", ", prefs.AudioLanguages), plan.AudioLanguage ?? "unknown");
+            }
+
+            return;
+        }
+
+        if (plan.OriginalSignal is not null)
+        {
+            LogSelectedOriginalAudio(index, itemName, plan.OriginalSignal);
+        }
+
+        LogSettingAudio(index, plan.AudioLanguage ?? "unknown", itemName);
+
+        await SendStreamIndexCommand(GeneralCommandType.SetAudioStreamIndex, index, sessionId).ConfigureAwait(false);
+    }
+
+    private async Task ApplySubtitles(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)
+    {
+        switch (plan.Subtitle)
+        {
+            case SubtitleAction.SelectForced when plan.SubtitleIndex is int forced:
+                LogSelectingForcedSubtitle(plan.AudioLanguage, forced, itemName);
+                await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forced, sessionId).ConfigureAwait(false);
+                break;
+
+            case SubtitleAction.Disable:
+                LogDisablingSubtitles(plan.AudioLanguage, itemName);
+                await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId).ConfigureAwait(false);
+                break;
+
+            case SubtitleAction.Select when plan.SubtitleIndex is int index:
+                LogSettingSubtitle(index, itemName);
+                await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, index, sessionId).ConfigureAwait(false);
+                break;
+
+            case SubtitleAction.NoMatch when _logger.IsEnabled(LogLevel.Debug):
+                LogNoSubtitleMatch(itemName, string.Join(", ", prefs.SubtitleLanguages));
+                break;
+        }
+    }
+
     private Task SendStreamIndexCommand(GeneralCommandType commandType, int index, string sessionId)
     {
         var command = new GeneralCommand
@@ -196,129 +298,5 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
         };
 
         return _sessionManager.SendGeneralCommand(string.Empty, sessionId, command, CancellationToken.None);
-    }
-
-    /// <summary>
-    /// Returns the language code of the selected audio stream, or null.
-    /// </summary>
-    private async Task<string?> TrySetAudioStream(
-        IReadOnlyList<MediaStream> streams,
-        UserLanguagePreference prefs,
-        string sessionId,
-        string? itemName,
-        string? originalLanguage)
-    {
-        int? bestAudioIndex = null;
-
-        // The original version wins over the priority list when the viewer asked for it —
-        // including when its language is not on that list at all, which is the whole point:
-        // "whatever language this was made in" is not something a list of languages can say.
-        if (prefs.PreferOriginalAudio)
-        {
-            var original = LanguageHelper.SelectOriginalAudioStream(streams, originalLanguage, _localizationManager);
-            if (original is not null)
-            {
-                bestAudioIndex = original.Value.Index;
-                LogSelectedOriginalAudio(original.Value.Index, itemName, original.Value.Signal);
-            }
-        }
-
-        if (bestAudioIndex is null && prefs.AudioLanguages.Count > 0)
-        {
-            bestAudioIndex = LanguageHelper.SelectBestAudioStream(streams, prefs.AudioLanguages, _localizationManager);
-        }
-
-        if (bestAudioIndex is null)
-        {
-            // We are leaving the audio track alone, so report what the client will
-            // most likely play. The subtitle decision depends on the audio language,
-            // and "unknown" would wrongly force subtitles on when the default track
-            // is already in a language the viewer reads.
-            var defaultLang = LanguageHelper.GetDefaultAudioLanguage(streams);
-
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                LogNoAudioSelected(itemName, string.Join(", ", prefs.AudioLanguages), defaultLang ?? "unknown");
-            }
-
-            return defaultLang;
-        }
-
-        var selectedStream = streams.FirstOrDefault(s => s.Index == bestAudioIndex.Value);
-        var selectedLang = selectedStream?.Language;
-
-        LogSettingAudio(bestAudioIndex.Value, selectedLang ?? "unknown", itemName);
-
-        await SendStreamIndexCommand(GeneralCommandType.SetAudioStreamIndex, bestAudioIndex.Value, sessionId)
-            .ConfigureAwait(false);
-
-        return selectedLang;
-    }
-
-    private async Task TrySetSubtitleStream(
-        IReadOnlyList<MediaStream> streams,
-        UserLanguagePreference prefs,
-        string sessionId,
-        string? itemName,
-        string? selectedAudioLang)
-    {
-        if (prefs.SubtitleLanguages.Count == 0)
-        {
-            return;
-        }
-
-        // If the audio already covers the viewer at least as well as the best subtitle
-        // language on offer, either skip subtitles entirely or fall back to forced ones
-        // (useful for translating foreign dialog).
-        if (LanguageHelper.AudioMakesSubtitlesRedundant(
-                streams, prefs.SubtitleLanguages, selectedAudioLang, _localizationManager))
-        {
-            if (prefs.PreferForcedWhenAudioMatches)
-            {
-                var forcedIdx = LanguageHelper.SelectForcedSubtitleForLanguage(
-                    streams,
-                    selectedAudioLang!,
-                    _localizationManager);
-
-                if (forcedIdx is not null)
-                {
-                    LogSelectingForcedSubtitle(selectedAudioLang, forcedIdx.Value, itemName);
-
-                    await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, forcedIdx.Value, sessionId)
-                        .ConfigureAwait(false);
-
-                    return;
-                }
-            }
-
-            LogDisablingSubtitles(selectedAudioLang, itemName);
-
-            await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, SubtitlesDisabledIndex, sessionId)
-                .ConfigureAwait(false);
-
-            return;
-        }
-
-        // Audio is NOT in a subtitle language — we want subtitles.
-        // Accept forced subtitles if no non-forced are available.
-        var bestSubIndex = LanguageHelper.SelectBestSubtitleStream(
-            streams,
-            prefs.SubtitleLanguages,
-            prefs.PreferNonForcedSubtitles,
-            _localizationManager);
-
-        if (bestSubIndex is null)
-        {
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                LogNoSubtitleMatch(itemName, string.Join(", ", prefs.SubtitleLanguages));
-            }
-            return;
-        }
-
-        LogSettingSubtitle(bestSubIndex.Value, itemName);
-
-        await SendStreamIndexCommand(GeneralCommandType.SetSubtitleStreamIndex, bestSubIndex.Value, sessionId)
-            .ConfigureAwait(false);
     }
 }
