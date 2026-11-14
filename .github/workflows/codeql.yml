@@ -2,10 +2,19 @@ name: CodeQL
 
 on:
   pull_request:
+    paths:
+      - '**/*.cs'
+      - '**/*.js'
+      - '**/*.mjs'
+      - '.github/workflows/**'
   schedule:
-    - cron: '23 4 * * 1'
+    - cron: '23 4 1 * *'
 
 permissions: {}
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

@@ -172,7 +172,9 @@ Deploy that DLL + `Jellyfin.Plugin.LanguageFailover/meta.json` to the plugin fol
 - Work on **`develop`** through pull requests; merge `develop` into **`main`** directly (no PR)
   for releases, then tag. After the release bot commits to `main`, fast-forward `develop` to it.
 - CI runs on pull requests and once more on the release tag. Pushes run nothing, so the same
-  commit is not tested twice. CodeQL also runs weekly.
+  commit is not tested twice. Docs-only pull requests skip the build; CodeQL only runs when code
+  or workflows change, plus once a month. Dependabot opens at most one grouped PR per ecosystem
+  per month.
 - Releases are automated by GitHub Actions on a tag push:
   ```bash
   git tag -a v1.1.0.3 -F release-notes.md --cleanup=verbatim

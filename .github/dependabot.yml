@@ -5,7 +5,7 @@ updates:
     directory: /
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     groups:
@@ -16,20 +16,23 @@ updates:
     directory: /
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     ignore:
       # Bumped by hand together with targetAbi.
       - dependency-name: "Jellyfin.*"
     groups:
-      tests:
-        patterns: ["xunit*", "Microsoft.NET.Test.Sdk"]
+      nuget:
+        patterns: ["*"]
 
   - package-ecosystem: npm
     directory: /web-tests
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]

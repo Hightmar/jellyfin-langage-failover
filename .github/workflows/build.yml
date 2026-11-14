@@ -3,6 +3,12 @@ name: Build
 on:
   # No push trigger: pull requests are the gate, and the release workflow re-tests the tag.
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'images/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
   workflow_dispatch:
   workflow_call:
 
