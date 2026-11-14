@@ -19,7 +19,7 @@ namespace Jellyfin.Plugin.LanguageFailover.Services;
 public partial class PlaybackStartHandler
 {
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Using series override for '{SeriesName}' — Audio=[{Audio}], Subtitle=[{Sub}]")]
     private partial void LogSeriesOverride(string seriesName, string audio, string sub);
 
@@ -34,12 +34,22 @@ public partial class PlaybackStartHandler
     private partial void LogProcessing(string? itemName, string userKey, string audio, string sub);
 
     [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Language Failover: Playback moved on from '{ItemName}' before its tracks were set; nothing sent")]
+    private partial void LogPlaybackMovedOn(string? itemName);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Language Failover: '{ItemName}': audio {Audio}, subtitles {Subtitles}")]
+    private partial void LogApplied(string? itemName, string audio, string subtitles);
+
+    [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Language Failover: Error processing playback start event")]
     private partial void LogUnhandledError(Exception exception);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Selected original-version audio stream at index {Index} for '{ItemName}' (via {Signal})")]
     private partial void LogSelectedOriginalAudio(int index, string? itemName, string signal);
 
@@ -49,17 +59,17 @@ public partial class PlaybackStartHandler
     private partial void LogNoAudioSelected(string? itemName, string langs, string lang);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Setting audio stream to index {Index} (lang={Lang}) for '{ItemName}'")]
     private partial void LogSettingAudio(int index, string lang, string? itemName);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Audio is in '{Lang}' — selecting forced subtitle stream at index {Index} for '{ItemName}'")]
     private partial void LogSelectingForcedSubtitle(string? lang, int index, string? itemName);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Audio '{Lang}' outranks every available subtitle language, disabling subtitles for '{ItemName}'")]
     private partial void LogDisablingSubtitles(string? lang, string? itemName);
 
@@ -69,7 +79,7 @@ public partial class PlaybackStartHandler
     private partial void LogNoSubtitleMatch(string? itemName, string langs);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Language Failover: Setting subtitle stream to index {Index} for '{ItemName}'")]
     private partial void LogSettingSubtitle(int index, string? itemName);
 }

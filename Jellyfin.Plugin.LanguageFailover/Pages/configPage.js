@@ -18,6 +18,7 @@ const FALLBACK_LANGS = [
 
 let currentConfig = null;
 let currentUserId = null;
+let knownUserKeys = null;
 let currentView = null;
 let culturesLoaded = false;
 
@@ -185,6 +186,7 @@ function setupListDragDrop(listEl) {
         codes.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, moved);
 
         renderPair(listEl, codes);
+        setDirty(true);
     });
 }
 
@@ -215,6 +217,7 @@ function handleListAction(e) {
     }
 
     renderPair(listEl, codes);
+    setDirty(true);
 }
 
 /** Handles an "+ Add" click next to any language list, global or per-series. */
@@ -229,6 +232,7 @@ function handleAddLanguage(btn) {
     const codes = getCodesFromList(listEl);
     if (codes.indexOf(selectEl.value) === -1) codes.push(selectEl.value);
     renderPair(listEl, codes);
+    setDirty(true);
 }
 
 // --- Configuration model ---
@@ -338,6 +342,7 @@ function addSeriesOverride(seriesId, seriesName) {
 
     saveUserPrefsToConfig(currentUserId, prefs);
     renderSeriesOverrides(prefs.SeriesOverrides);
+    setDirty(true);
 }
 
 function removeSeriesOverride(seriesId) {
@@ -350,10 +355,14 @@ function removeSeriesOverride(seriesId) {
     prefs.SeriesOverrides.splice(idx, 1);
     saveUserPrefsToConfig(currentUserId, prefs);
     renderSeriesOverrides(prefs.SeriesOverrides);
+    setDirty(true);
 }
+
+let searchSeq = 0;
 
 function searchSeries(query) {
     const resultsList = currentView.querySelector('#seriesSearchResults');
+    const seq = ++searchSeq;
     if (!query || query.length < 2) {
         resultsList.style.display = 'none';
         return;
@@ -368,12 +377,13 @@ function searchSeries(query) {
         resultsList.style.display = 'block';
     };
 
-    ApiClient.getItems(ApiClient.getCurrentUserId(), {
+    ApiClient.getItems(currentUserId, {
         SearchTerm: query,
         IncludeItemTypes: 'Series',
         Recursive: true,
         Limit: 10
     }).then((result) => {
+        if (seq !== searchSeq) return;
         if (!result.Items || result.Items.length === 0) {
             showMessage('No series found');
             return;
@@ -394,6 +404,7 @@ function searchSeries(query) {
         });
         resultsList.style.display = 'block';
     }).catch((err) => {
+        if (seq !== searchSeq) return;
         console.error('Language Failover series search error:', err);
         showMessage('Search failed. Check the server logs.');
     });
@@ -456,15 +467,25 @@ function showStatus(msg, isError) {
     statusTimer = setTimeout(() => { el.className = 'lf-status'; }, 3000);
 }
 
+function setDirty(dirty) {
+    currentView.querySelector('#dirtyIndicator').hidden = !dirty;
+}
+
 function doSave() {
     if (!currentUserId) return;
     saveUserPrefsToConfig(currentUserId, getCurrentPrefs());
+
+    if (knownUserKeys) {
+        currentConfig.UserPreferences = currentConfig.UserPreferences.filter(
+            (p) => knownUserKeys.has(String(p.UserId).toLowerCase()));
+    }
 
     ApiClient.updatePluginConfiguration(pluginId, currentConfig)
         .then(() => ApiClient.getPluginConfiguration(pluginId))
         .then((config) => {
             currentConfig = config;
             loadUserPrefs();
+            setDirty(false);
             showStatus('Configuration saved.', false);
         })
         .catch((err) => {
@@ -482,6 +503,7 @@ export default function (view) {
             .then((users) => {
                 const selectUser = view.querySelector('#selectUser');
                 const previousUserId = currentUserId;
+                knownUserKeys = new Set(users.map((u) => stripHyphens(u.Id).toLowerCase()));
 
                 selectUser.innerHTML = '';
                 users.forEach((user) => {
@@ -500,6 +522,7 @@ export default function (view) {
                         currentUserId = users[0].Id;
                     }
                     loadUserPrefs();
+                    setDirty(false);
                 });
             })
             .catch((err) => {
@@ -512,6 +535,10 @@ export default function (view) {
         if (currentUserId) saveUserPrefsToConfig(currentUserId, getCurrentPrefs());
         currentUserId = this.value;
         loadUserPrefs();
+    });
+
+    view.addEventListener('change', (e) => {
+        if (e.target.matches('input[type="checkbox"]')) setDirty(true);
     });
 
     // One delegated handler for every language list on the page — the two global

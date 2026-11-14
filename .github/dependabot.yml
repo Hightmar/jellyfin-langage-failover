@@ -1,0 +1,35 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      # Bumped by hand together with targetAbi.
+      - dependency-name: "Jellyfin.*"
+    groups:
+      tests:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk"]
+
+  - package-ecosystem: npm
+    directory: /web-tests
+    target-branch: develop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

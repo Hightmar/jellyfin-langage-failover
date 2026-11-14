@@ -30,7 +30,7 @@ Jellyfin only supports a single default audio/subtitle language per user. This p
 2. It looks up the user's configured language priorities
 3. If the item is a TV episode, it checks for series-specific overrides
 4. It analyzes all available audio/subtitle streams on the media file
-5. **Audio selection**: if "Prefer original audio" is on and a track is tagged as Original/VO, it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
+5. **Audio selection**: if "Prefer original audio" is on and the original version can be identified (container flag, Original/VO title, or the item's original language from its metadata), it wins; otherwise the highest-priority language match wins (surround preferred over stereo within the same language)
 6. **Subtitle selection**: the audio language is compared against your subtitle priority list. If the audio ranks at least as highly as the best subtitle language actually present on the file, subtitles are disabled — or switched to forced, when "Show forced subtitles when audio matches" is on. Otherwise the best subtitle track in your priority order is selected
 7. It sends `SetAudioStreamIndex` / `SetSubtitleStreamIndex` commands to the client
 
@@ -96,7 +96,7 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 3. **Audio Language Priority** — Add languages and reorder them by drag-and-drop (or with the up/down arrows). The first available match in the media file wins. Among streams of the same language, surround sound (5.1/7.1) is preferred over stereo.
 4. **Subtitle Language Priority** — Same principle. Subtitles are only activated when they beat the audio: if the audio language ranks at least as highly in this list as the best subtitle track the file actually has, subtitles stay off.
 5. **Prefer non-forced subtitles** — When checked, complete subtitles are preferred over forced (signs/songs only) subtitles — anime *Signs & Songs* / *S&S* tracks included. If only forced subtitles are available, they will still be selected as a fallback. Forced tracks are detected from the container flag as well as the track title, so this works even when the file's forced flag is missing.
-6. **Prefer original audio (VO)** — When checked, a track tagged as Original / VO / Version Originale beats the priority list. Falls back to the priority list if no track is tagged.
+6. **Prefer original audio (VO)** — When checked, the original version beats the priority list, even in a language that is not on it. It is found from the container's original flag, then a title saying Original / VO / Version Originale, then the original language in the item's metadata. Falls back to the priority list if none of these finds a track.
 7. **Show forced subtitles when audio matches your language** — When checked, instead of disabling subtitles in the case where audio already matches one of your subtitle languages, the plugin selects a forced subtitle track in that language if one exists. Useful for translating foreign dialog or on-screen text in an otherwise native-language film, and for keeping the *Signs & Songs* / *S&S* track on a dubbed anime.
 8. **Save**
 
@@ -104,7 +104,7 @@ Navigate to **Dashboard > Plugins > Language Failover**.
 
 Below the global preferences, you can add per-series overrides:
 
-1. **Search** for a series by name in the search box
+1. **Search** for a series by name in the search box (it searches the selected user's libraries)
 2. **Click** on the series in the results to add it
 3. **Configure** audio and/or subtitle languages specifically for that series
 4. Leave a field empty to fall back to the global preferences for that field
@@ -140,6 +140,7 @@ receives no further fixes, and upgrading the server is the way to get new ones.
 - Verify the user has preferences configured and the plugin is enabled for that user
 - Verify the plugin is loaded: check Jellyfin logs for `Loaded plugin: Language Failover`
 - **Restart the client.** A client that was already open when the plugin was installed or updated can keep running without it, and the symptom is simply that nothing ever changes. Closing and reopening the app fixes it.
+- Each playback the plugin acts on logs one line, e.g. `Language Failover: 'Title': audio #2 (jpn), subtitles off`. No line means it changed nothing.
 - Enable debug logging in Jellyfin (`Logging:LogLevel:Jellyfin.Plugin.LanguageFailover` = `Debug`) to see detailed selection info
 
 ### Subtitles stay forced instead of switching to the complete track
@@ -170,22 +171,29 @@ Some clients may override the plugin's selection with their own defaults. The pl
 
 ## Releasing (maintainers)
 
-Releases are automated via GitHub Actions. To publish a new version:
+Releases are automated via GitHub Actions. Push an annotated tag whose message is the changelog:
 
 ```bash
-git tag v1.1.0.1 -m "Release 1.1.0.1"
-git push origin v1.1.0.1
+git tag -a v1.4.0.1 -F release-notes.md --cleanup=verbatim
+git push origin v1.4.0.1
 ```
 
 The workflow will:
-1. Build the plugin in Release mode
-2. Package the DLL and meta.json as `language-failover_<version>.zip`
-3. Create a GitHub Release with the ZIP attached
-4. Update `manifest.json` on `main` with the new version entry and commit it back
+1. Check the tag (four numeric segments, on `main`, annotated)
+2. Run both test suites
+3. Package the DLL, meta.json and image as `language-failover_<version>.zip`
+4. Create a GitHub Release with the ZIP and a build provenance attestation
+5. Update `manifest.json` and `meta.json` on `main` and commit them back
 
 Users subscribed to the repository will see the new version in their Jellyfin plugin catalog.
 
 Version numbers must follow the format `major.minor.patch.build` (four segments, as required by Jellyfin).
+
+To check that a ZIP was built by this repository's release workflow:
+
+```bash
+gh attestation verify language-failover_1.4.0.1.zip --repo Hightmar/jellyfin-langage-failover
+```
 
 ## License
 
