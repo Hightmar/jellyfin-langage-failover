@@ -20,4 +20,8 @@
     <EmbeddedResource Include="Pages\configPage.js" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jellyfin.Plugin.LanguageFailover.Tests" />
+  </ItemGroup>
+
 </Project>
