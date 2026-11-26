@@ -191,7 +191,7 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
                 return;
             }
 
-            await ApplyAudio(plan, prefs, session.Id, itemName).ConfigureAwait(false);
+            await ApplyAudio(plan, prefs, session.Id, itemName, session.PlayState?.AudioStreamIndex).ConfigureAwait(false);
 
             await Task.Delay(BetweenCommandsDelay).ConfigureAwait(false);
 
@@ -242,7 +242,7 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
         return (audio, subtitles);
     }
 
-    private async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName)
+    internal async Task ApplyAudio(TrackSelectionPlan plan, UserLanguagePreference prefs, string sessionId, string? itemName, int? currentAudioIndex)
     {
         if (plan.AudioIndex is not int index)
         {
@@ -251,6 +251,12 @@ public partial class PlaybackStartHandler : IEventConsumer<PlaybackStartEventArg
                 LogNoAudioSelected(itemName, string.Join(", ", prefs.AudioLanguages), plan.AudioLanguage ?? "unknown");
             }
 
+            return;
+        }
+
+        // A redundant command can reopen an HLS stream and race the subtitle command.
+        if (index == currentAudioIndex)
+        {
             return;
         }
 
